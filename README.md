@@ -10,6 +10,8 @@ VolaSurfer is a suite of options analysis tools designed for volatility analysis
 - **Multi-Exchange Support**: Supports multiple exchanges, allowing users to access a wide range of market data.
 - **User-Friendly Interface**: Focuses on providing an intuitive interface for ease of use by traders and analysts.
 
+![VolaSurfer Dashboard](doc/img/VolaSurferDashboard.png)
+
 ## Prerequisites
 
 - Python 3.11.9
