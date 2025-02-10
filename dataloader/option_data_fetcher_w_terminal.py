@@ -248,7 +248,7 @@ class EnhancedOptionFetcher:
 
 def main(save_data=False):
     fetcher = EnhancedOptionFetcher(
-        ticker="NKE", num_strikes=3, days_to_expiration=20, max_contract_tickers=5
+        ticker="NKE", num_strikes=6, days_to_expiration=30, max_contract_tickers=15
     )
 
     try:

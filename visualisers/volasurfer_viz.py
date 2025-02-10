@@ -39,7 +39,7 @@ class VolatilitySurfaceStreamer:
         days_to_expiration: List[int] = [7, 14, 30, 45],  # target maturities
         max_streaming_len: int = 1000,
         risk_free_rate: float = 0.05,
-        dividend_yield: float = 0.0,
+        dividend_yield: float = 0.01,
     ):
         self.underlying = underlying
         self.num_strikes = num_strikes
@@ -262,9 +262,9 @@ def show_volatility_surface():
     # Your existing volatility surface code here
     if "vss" not in st.session_state:
         st.session_state.vss = VolatilitySurfaceStreamer(
-            underlying="NKE",  # You can change this to a dynamic input if needed
-            num_strikes=10,
-            days_to_expiration=[7, 14, 30],
+            underlying="AAPL",  # You can change this to a dynamic input if needed
+            num_strikes=6,
+            days_to_expiration=[7, 14, 30, 60],
         )
 
         # Fetch initial data
