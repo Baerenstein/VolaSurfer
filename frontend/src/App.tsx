@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import Header from './components/Header';
-import SurfacePage from './components/pages/SurfacePage';
+import SurfacePage from './components/SurfacePage';
 
 const App: React.FC = () => {
   const [currentPage, setCurrentPage] = useState('landing');

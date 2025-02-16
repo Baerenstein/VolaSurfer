@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import Plot from 'react-plotly.js';
-import { useSurfaceData } from '../../hooks/useSurfaceData';
+import { useSurfaceData } from '../hooks/useSurfaceData';
 
 interface ContainerProps {
   title: string;
@@ -72,14 +72,13 @@ const VolaHeatContent: React.FC<ReturnType<typeof useSurfaceData>> = ({
             data={[
               {
                 type: 'heatmap',
-                x: data.daysToExpiry.slice(0, 5),
-                y: data.moneyness.slice(0, 5),
+                x: data.moneyness,
+                y: data.daysToExpiry,
                 z: data.impliedVols,
                 showscale: true,
                 colorscale: 'Viridis',
                 colorbar: {
                   title: 'IV',
-                  tickformat: '.2%',
                 },
                 hoverongaps: false,
                 hoverlabel: {
@@ -91,14 +90,13 @@ const VolaHeatContent: React.FC<ReturnType<typeof useSurfaceData>> = ({
             layout={{
               title: 'Volatility Heatmap',
               xaxis: { 
+                title: 'Moneyness',
+                tickformat: '.2f',
+              },
+              yaxis: { 
                 title: 'Days to Expiry',
                 tickformat: '.0f',
                 side: 'top',
-              },
-              yaxis: { 
-                title: 'Moneyness',
-                tickformat: '.2f',
-                autorange: 'reversed',
               },
               margin: { l: 60, r: 30, t: 60, b: 30 }
             }}
@@ -154,7 +152,7 @@ const SurfacePage: React.FC = () => {
                           project: { z: true }
                         }
                       },
-                      opacity: 0.9,
+                      opacity: 1,
                       hoverongaps: false,
                       hoverlabel: {
                         bgcolor: "#FFF",
@@ -168,10 +166,12 @@ const SurfacePage: React.FC = () => {
                       xaxis: { 
                         title: 'Moneyness',
                         tickformat: '.2f',
+                        autorange: 'reversed',
                       },
                       yaxis: { 
                         title: 'Days to Expiry',
                         tickformat: '.0f',
+                        autorange: 'reversed',
                       },
                       zaxis: { 
                         title: 'Implied Volatility',
