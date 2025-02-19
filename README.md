@@ -28,16 +28,26 @@ cd VolaSurfer
 2. Set up a PostgreSQL database 
 [see `postgres_setup.md`](doc/postgres_setup.md)
 
-3. Create a virtual environment and install dependencies:
+3. Navigate to the `backend` directory:
+```bash
+cd backend
+```
+
+4. Create a virtual environment and install dependencies:
 ```bash
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Run the data worker to collect data:
+5. Run the data worker to collect data:
 ```bash
 python -m business_logic.market_data_worker
+```
+
+6. Start the backend server:
+```bash
+uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ## Configuration
