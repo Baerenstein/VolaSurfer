@@ -141,7 +141,7 @@ const SurfacePage: React.FC = () => {
                       type: 'surface',
                       x: surfaceData.data.moneyness,
                       y: surfaceData.data.daysToExpiry,
-                      z: surfaceData.data.impliedVols,
+                      z: surfaceData.data.impliedVols.map(row => row.map(vol => vol / 100)),
                       showscale: true,
                       colorscale: 'Viridis',
                       contours: {
@@ -149,7 +149,7 @@ const SurfacePage: React.FC = () => {
                           show: true,
                           usecolormap: true,
                           highlightcolor: "#42f462",
-                          project: { z: true }
+                          project: { z: true },
                         }
                       },
                       opacity: 1,
