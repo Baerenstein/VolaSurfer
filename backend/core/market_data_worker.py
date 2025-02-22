@@ -58,30 +58,6 @@ class MarketDataWorker:
             self.logger.error(f"Error getting last price for {currency}: {e}")
             return None
 
-    # async def initialize_instruments(self):
-    #     """Initialize the set of instruments to monitor"""
-    #     if self.instruments_initialized:
-    #         self.logger.info("Instruments have already been initialized.")
-    #         return
-
-    #     for currency in self.currencies:
-
-    #         instruments = self.exchange_api.get_options(currency)
-
-    #         filtered = []
-    #         for inst in instruments.get("options", []):
-    #             option_data = self.exchange_api.get_option_data(inst["instrument_name"])
-    #             if option_data and option_data["last_price"] > 0:
-    #                 filtered.append(
-    #                     inst
-    #                 )
-
-    #         if filtered:
-    #             self.state.active_instruments.update(
-    #                 symbol["instrument_name"] for symbol in filtered
-    #             )
-    #     self.instruments_initialized = True
-
     async def initialize_instruments(self):
         """Initialize the set of instruments to monitor"""
         if self.instruments_initialized:
