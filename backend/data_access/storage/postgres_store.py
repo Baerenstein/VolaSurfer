@@ -32,10 +32,22 @@ class PostgresStore(BaseStore):
 
     def initialize_tables(self):
         """Initialize required tables in PostgreSQL"""
+        self.initialize_assets_table()
         self.initialize_options_data_table()
         self.initialize_underlying_data_table()
         self.initialize_vol_surface_table()
         self.initialize_vol_surface_points_table()
+
+    def initialize_assets_table(self):
+        """Create assets table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS assets (
+                    id SERIAL PRIMARY KEY,
+                    asset_type VARCHAR NOT NULL,  -- e.g., 'equity', 'crypto'
+                    ticker VARCHAR NOT NULL UNIQUE  -- Unique ticker for the asset
+                )
+            """)
 
     def initialize_options_data_table(self):
         """Create options_data table"""
@@ -44,6 +56,7 @@ class PostgresStore(BaseStore):
                 CREATE TABLE IF NOT EXISTS options_data (
                     id SERIAL PRIMARY KEY,
                     timestamp TIMESTAMP,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
                     symbol VARCHAR,
                     strike DOUBLE PRECISION,
                     moneyness DOUBLE PRECISION,
@@ -67,6 +80,7 @@ class PostgresStore(BaseStore):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS underlying_data (
                     id SERIAL PRIMARY KEY,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
                     symbol VARCHAR,
                     price DOUBLE PRECISION,
                     timestamp TIMESTAMP
@@ -86,7 +100,6 @@ class PostgresStore(BaseStore):
                 )
             """)
 
-    # VolSurface TODO: add option type parameter
     def initialize_vol_surface_points_table(self):
         """Create vol_surface_points table"""
         with self.conn.cursor() as cursor:
@@ -103,41 +116,23 @@ class PostgresStore(BaseStore):
                 )
             """)
 
-    # TODO the symbol should be used to store the data in the correct table
-    def store_options_chain(self, options_df: pd.DataFrame, symbol: str):
+    def store_options_chain(self, options_df: pd.DataFrame):
         """Store options chain data with limited decimal places"""
+        for idx, row in options_df.iterrows():
 
-        numeric_columns = [
-            "days_to_expiry",
-            "strike",
-            "moneyness",
-            "last_price",
-            "implied_vol",
-            "delta",
-            "gamma",
-            "vega",
-            "theta",
-        ]
-
-        for col in numeric_columns:
-            if col in options_df.columns:
-                options_df[col] = options_df[col].apply(
-                    lambda x: self._limit_decimals(x)
-                )
-
-        with self.conn.cursor() as cursor:
-            for idx, row in options_df.iterrows():
+            with self.conn.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO options_data (
-                        timestamp, symbol, option_type, base_currency,
+                        timestamp, asset_id, symbol, option_type, base_currency,
                         expiry_date, days_to_expiry, strike, moneyness,
                         last_price, implied_vol, delta, gamma, vega, theta,
                         snapshot_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         row["timestamp"],
+                        row["asset_id"],
                         row["symbol"],
                         row["option_type"],
                         row["base_currency"],
@@ -152,9 +147,9 @@ class PostgresStore(BaseStore):
                         self._limit_decimals(row.get("vega")),
                         self._limit_decimals(row.get("theta")),
                         row["snapshot_id"],
-                    ),
+                    )
                 )
-            self.conn.commit()
+        self.conn.commit()
 
     def get_options_chain(self, symbol: str) -> List[OptionContract]:
         """Retrieve options chain using SQLAlchemy"""
@@ -182,22 +177,22 @@ class PostgresStore(BaseStore):
         ]
         return contracts
 
-    def store_underlying(self, last_price: float, symbol: str):
+    def store_underlying(self, last_price: float, asset_type: str, symbol: str):
         """Store underlying asset data"""
+        asset_type = self.get_or_create_asset(asset_type, symbol)
         underlying_df = pd.DataFrame(
-            {"symbol": [symbol], "price": [last_price], "timestamp": [datetime.now()]}
+            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
         )
-
         with self.conn.cursor() as cursor:
             for _, row in underlying_df.iterrows():
                 cursor.execute(
                     """
-                    INSERT INTO underlying_data (symbol, price, timestamp)
-                    VALUES (%s, %s, %s)
-                """,
-                    (row["symbol"], row["price"], row["timestamp"]),
+                    INSERT INTO underlying_data (asset_id, symbol, price, timestamp)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (row["asset_id"], row["symbol"], row["price"], row["timestamp"]),
                 )
-            self.conn.commit()
+        self.conn.commit()
 
     def get_underlying_data(self, symbol: str) -> pd.DataFrame:
         """Retrieve the latest underlying data for a symbol"""
@@ -412,3 +407,20 @@ class PostgresStore(BaseStore):
                 "days_to_expiry": days_to_expiry,
                 "implied_vols": implied_vols
             }
+
+    def get_or_create_asset(self, asset_type: str, ticker: str) -> int:
+        """Get the asset ID or create a new asset if it doesn't exist"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO assets (asset_type, ticker)
+                VALUES (%s, %s)
+                ON CONFLICT (ticker) DO NOTHING
+                RETURNING id
+            """, (asset_type, ticker))
+            
+            asset_id = cursor.fetchone()
+            if asset_id is None:
+                cursor.execute("SELECT id FROM assets WHERE ticker = %s", (ticker,))
+                asset_id = cursor.fetchone()
+            
+            return asset_id[0]

@@ -21,15 +21,16 @@ class MarketDataWorker:
         exchange_api: DeribitAPI,
         vol_engine: VolatilityEngine,
         settings: Settings = Settings(),
-        currencies: list[str] = ["ETH"],
+        currencies: str = "ETH",
+        asset_type: str = "crypto",
     ):
         self.settings = settings
         self.exchange_api = exchange_api
         self.vol_engine = vol_engine
         self.currencies = currencies
+        self.asset_type = asset_type
 
-        self.max_retries = 3
-
+        self.max_retries = 1
         self.store = StorageFactory.create_storage(settings)
         self.state = MarketState(
             last_update=datetime.now(), active_instruments=set(), last_price=float
@@ -163,14 +164,14 @@ class MarketDataWorker:
         except Exception as e:
             await self._handle_error(e)
 
-    # TODO implementfilter based on expiry_date and moneyness
     async def _process_currency_updates(self, currency: str):
         """Process updates for a specific currency using OptionContract objects"""
         print(f"{datetime.now()}: Starting to process currency updates\n")
 
         try:
             last_price = await self.get_last_price(currency)
-            self.store.store_underlying(last_price, currency)
+            asset_id = self.store.get_or_create_asset(self.asset_type, currency)
+            self.store.store_underlying(last_price, self.asset_type, currency)
             print(f"{datetime.now()}: Underlying data stored successfully\n")
 
             market_data_points = []
@@ -194,6 +195,7 @@ class MarketDataWorker:
 
                     option = OptionContract(
                         timestamp=current_time,
+                        asset_id=asset_id,
                         base_currency=currency,
                         symbol=symbol,
                         expiry_date=expiry_date,
@@ -224,7 +226,7 @@ class MarketDataWorker:
                 combined_df["ask_price"].fillna(0, inplace=True)
                 combined_df["open_interest"].fillna(0, inplace=True)
 
-                self.store.store_options_chain(combined_df, currency)
+                self.store.store_options_chain(combined_df)
 
                 print(f"{datetime.now()}: adding data to volatility engine\n")
                 for option in market_data_points:
@@ -373,10 +375,4 @@ if __name__ == "__main__":
 
 # get_option_data is currently run twice, once in _fetch_instruments and once in _process_currency_updates
 # this leads to a lot of redundant calls to the API and slows down the algorithm
-# instead of calling get_option_data in _fetch_instruments, we should only fetch contract names
-# alterntively, we could fetch all option data in _fetch_instruments and then filter out the contracts
-# based on maturity and moneyness in _process_currency_updates
-# this should reduce the API calls, make the script faster and reduce data storage
-
-# ideally the code is structured in a way that the worker runs once and then sleeps until the next run
-#
+# instead it should call the api periodically and use a websocket to get the updates.
