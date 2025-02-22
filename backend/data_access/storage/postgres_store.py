@@ -57,6 +57,7 @@ class PostgresStore(BaseStore):
                     id SERIAL PRIMARY KEY,
                     timestamp TIMESTAMP,
                     asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
+                    symbol VARCHAR,
                     strike DOUBLE PRECISION,
                     moneyness DOUBLE PRECISION,
                     option_type VARCHAR,
@@ -80,6 +81,7 @@ class PostgresStore(BaseStore):
                 CREATE TABLE IF NOT EXISTS underlying_data (
                     id SERIAL PRIMARY KEY,
                     asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
+                    symbol VARCHAR,
                     price DOUBLE PRECISION,
                     timestamp TIMESTAMP
                 )
@@ -98,7 +100,6 @@ class PostgresStore(BaseStore):
                 )
             """)
 
-    # VolSurface TODO: add option type parameter
     def initialize_vol_surface_points_table(self):
         """Create vol_surface_points table"""
         with self.conn.cursor() as cursor:
@@ -115,8 +116,7 @@ class PostgresStore(BaseStore):
                 )
             """)
 
-    # TODO the symbol should be used to store the data in the correct table
-    def store_options_chain(self, options_df: pd.DataFrame, asset_type: str):
+    def store_options_chain(self, options_df: pd.DataFrame):
         """Store options chain data with limited decimal places"""
         for idx, row in options_df.iterrows():
 
@@ -124,15 +124,16 @@ class PostgresStore(BaseStore):
                 cursor.execute(
                     """
                     INSERT INTO options_data (
-                        timestamp, asset_id, option_type, base_currency,
+                        timestamp, asset_id, symbol, option_type, base_currency,
                         expiry_date, days_to_expiry, strike, moneyness,
                         last_price, implied_vol, delta, gamma, vega, theta,
                         snapshot_id
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """,
                     (
                         row["timestamp"],
                         row["asset_id"],
+                        row["symbol"],
                         row["option_type"],
                         row["base_currency"],
                         row["expiry_date"],
@@ -180,7 +181,7 @@ class PostgresStore(BaseStore):
         """Store underlying asset data"""
         asset_type = self.get_or_create_asset(asset_type, symbol)
         underlying_df = pd.DataFrame(
-            {"asset_id": [asset_type], "price": [last_price], "timestamp": [datetime.now()]}
+            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
         )
         with self.conn.cursor() as cursor:
             for _, row in underlying_df.iterrows():

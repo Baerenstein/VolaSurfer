@@ -21,7 +21,7 @@ class MarketDataWorker:
         exchange_api: DeribitAPI,
         vol_engine: VolatilityEngine,
         settings: Settings = Settings(),
-        currencies: list[str] = ["ETH"],
+        currencies: str = "ETH",
         asset_type: str = "crypto",
     ):
         self.settings = settings
@@ -164,7 +164,6 @@ class MarketDataWorker:
         except Exception as e:
             await self._handle_error(e)
 
-    # TODO implementfilter based on expiry_date and moneyness
     async def _process_currency_updates(self, currency: str):
         """Process updates for a specific currency using OptionContract objects"""
         print(f"{datetime.now()}: Starting to process currency updates\n")
@@ -227,7 +226,7 @@ class MarketDataWorker:
                 combined_df["ask_price"].fillna(0, inplace=True)
                 combined_df["open_interest"].fillna(0, inplace=True)
 
-                self.store.store_options_chain(combined_df, self.asset_type)
+                self.store.store_options_chain(combined_df)
 
                 print(f"{datetime.now()}: adding data to volatility engine\n")
                 for option in market_data_points:
