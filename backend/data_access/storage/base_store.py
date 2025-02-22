@@ -34,11 +34,6 @@ class BaseStore(ABC):
     def get_vol_surfaces(self, timestamp: datetime) -> VolSurface:
         """Retrieve the latest surface data for a timestamp"""
         pass
-
-    @abstractmethod
-    def get_current_vol_surface(self) -> VolSurface:
-        """Retrieve the latest surface data"""
-        pass
     
     @abstractmethod
     def get_latest_vol_surface(self):

@@ -190,11 +190,10 @@ class VolatilityEngine:
         implied_vols = [point.implied_vol for point in filtered_vol_points]
         option_types = [point.option_type for point in filtered_vol_points]
 
-        # TODO add interpolation method
 
         vol_surface = VolSurface(
             timestamp=datetime.now(),  # or use surface.timestamp
-            method="computed",  # Specify the method used for computation
+            method="computed", 
             strikes=strikes,
             moneyness=moneyness,
             maturities=maturities,

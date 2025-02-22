@@ -116,6 +116,29 @@ class PostgresStore(BaseStore):
                 )
             """)
 
+    def store_underlying(self, last_price: float, asset_type: str, symbol: str):
+        """Store underlying asset data"""
+        asset_type = self.get_or_create_asset(asset_type, symbol)
+        underlying_df = pd.DataFrame(
+            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
+        )
+        with self.conn.cursor() as cursor:
+            for _, row in underlying_df.iterrows():
+                cursor.execute(
+                    """
+                    INSERT INTO underlying_data (asset_id, symbol, price, timestamp)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (row["asset_id"], row["symbol"], row["price"], row["timestamp"]),
+                )
+        self.conn.commit()
+
+    def get_underlying_data(self, symbol: str) -> pd.DataFrame:
+        """Retrieve the latest underlying data for a symbol"""
+        query = "SELECT * FROM underlying_data WHERE symbol = %s"
+        df = pd.read_sql_query(query, self.conn, params=(symbol,))
+        return df
+
     def store_options_chain(self, options_df: pd.DataFrame):
         """Store options chain data with limited decimal places"""
         for idx, row in options_df.iterrows():
@@ -176,29 +199,6 @@ class PostgresStore(BaseStore):
             for _, row in df.iterrows()
         ]
         return contracts
-
-    def store_underlying(self, last_price: float, asset_type: str, symbol: str):
-        """Store underlying asset data"""
-        asset_type = self.get_or_create_asset(asset_type, symbol)
-        underlying_df = pd.DataFrame(
-            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
-        )
-        with self.conn.cursor() as cursor:
-            for _, row in underlying_df.iterrows():
-                cursor.execute(
-                    """
-                    INSERT INTO underlying_data (asset_id, symbol, price, timestamp)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (row["asset_id"], row["symbol"], row["price"], row["timestamp"]),
-                )
-        self.conn.commit()
-
-    def get_underlying_data(self, symbol: str) -> pd.DataFrame:
-        """Retrieve the latest underlying data for a symbol"""
-        query = "SELECT * FROM underlying_data WHERE symbol = %s"
-        df = pd.read_sql_query(query, self.conn, params=(symbol,))
-        return df
 
     def store_vol_surface(self, vol_surface: VolSurface) -> int:
         """Store volatility surface with limited decimal places"""
@@ -308,60 +308,6 @@ class PostgresStore(BaseStore):
                 implied_vols=implied_vols,
                 option_type=option_type,
                 snapshot_id=snapshot_id,
-            )
-
-    def get_current_vol_surface(self) -> VolSurface:
-        """
-        Retrieve the most recent VolSurface object from the database.
-        Returns float values instead of Decimal.
-        """
-        with self.conn.cursor() as cur:
-            cur.execute("""
-                SELECT timestamp, snapshot_id 
-                FROM vol_surfaces 
-                ORDER BY timestamp DESC 
-                LIMIT 1
-            """)
-            latest = cur.fetchone()
-
-            if not latest:
-                return None
-
-            latest_timestamp, latest_snapshot_id = latest
-
-            query = """
-                SELECT vsp.strike::float, vsp.moneyness::float, vsp.maturity, 
-                    vsp.days_to_expiry::float, vsp.implied_vol::float, vsp.option_type, 
-                    vs.method
-                FROM vol_surfaces vs
-                JOIN vol_surface_points vsp ON vs.id = vsp.vol_surface_id
-                WHERE vs.timestamp = %s AND vs.snapshot_id = %s
-            """
-
-            cur.execute(query, (latest_timestamp, latest_snapshot_id))
-            rows = cur.fetchall()
-
-            if not rows:
-                return None
-
-            strikes = [row[0] for row in rows]
-            moneyness = [row[1] for row in rows]
-            maturities = [row[2] for row in rows]
-            days_to_expiry = [row[3] for row in rows]
-            implied_vols = [row[4] for row in rows]
-            option_type = [row[5] for row in rows]
-            method = rows[0][6]
-
-            return VolSurface(
-                timestamp=latest_timestamp,
-                method=method,
-                strikes=strikes,
-                moneyness=moneyness,
-                maturities=maturities,
-                days_to_expiry=days_to_expiry,
-                implied_vols=implied_vols,
-                option_type=option_type,
-                snapshot_id=latest_snapshot_id,
             )
 
     def get_latest_vol_surface(self):

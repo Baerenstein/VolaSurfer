@@ -77,19 +77,6 @@ async def get_options_chain(symbol: str) -> List[dict]:
 
     return JSONResponse(content=options)
 
-
-@app.get("/api/v1/vol-surface/{symbol}")
-async def get_vol_surfaces(
-    symbol: str, timestamp: Optional[str] = None, snapshot_id: Optional[str] = None
-):
-    """Retrieve the volatility surface for a given symbol and timestamp."""
-    vol_surface = store.get_vol_surfaces(timestamp, snapshot_id)
-    if vol_surface is None:
-        raise HTTPException(status_code=404, detail="Volatility surface not found")
-
-    return JSONResponse(content=vol_surface.to_dict())
-
-
 @app.get("/api/v1/latest-vol-surface")
 async def get_latest_vol_surface(
     method: InterpolationMethod = Query(
