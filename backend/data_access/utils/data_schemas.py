@@ -16,6 +16,7 @@ class MarketState:
 @dataclass
 class OptionContract:
     timestamp: datetime
+    asset_id: str
     base_currency: str
     symbol: str
     expiry_date: datetime
