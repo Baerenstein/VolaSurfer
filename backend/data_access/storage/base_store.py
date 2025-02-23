@@ -25,16 +25,6 @@ class BaseStore(ABC):
     def get_options_chain(self, symbol: str) -> pd.DataFrame:
         """Retrieve the latest options chain for a symbol"""
         pass
-
-    # @abstractmethod
-    # def store_vol_surface(self, vol_surface: VolSurface):
-    #     """Store surface data"""
-    #     pass
-
-    # @abstractmethod
-    # def get_vol_surfaces(self, timestamp: datetime) -> VolSurface:
-    #     """Retrieve the latest surface data for a timestamp"""
-    #     pass
     
     @abstractmethod
     def get_latest_vol_surface(self):
