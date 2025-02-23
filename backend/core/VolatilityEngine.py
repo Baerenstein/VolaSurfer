@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from scipy.interpolate import griddata
 from collections import defaultdict
-from data_access.utils.data_schemas import VolatilityPoint, VolSurface
+from data.utils.data_schemas import VolatilityPoint, VolSurface
 
 
 class VolPoints:

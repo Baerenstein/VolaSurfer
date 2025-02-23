@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import pandas as pd
 from datetime import datetime
-from data_access.utils.data_schemas import VolSurface
+from data.utils.data_schemas import VolSurface
 
 
 class BaseStore(ABC):

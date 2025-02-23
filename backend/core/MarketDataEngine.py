@@ -5,17 +5,17 @@ import signal
 import warnings
 
 from infrastructure.settings import Settings
-from data_access.exchanges.deribit import DeribitAPI
-from core.volatility_engine import VolatilityEngine
-from data_access.storage import StorageFactory
+from data.exchanges.deribit import DeribitAPI
+from core.VolatilityEngine import VolatilityEngine
+from data.storage import StorageFactory
 from infrastructure.utils.logging import setup_logger
-from data_access.utils.data_schemas import OptionContract, MarketState, VolSurface
+from data.utils.data_schemas import OptionContract, MarketState, VolSurface
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 
 
-class MarketDataWorker:
+class MarketDataEngine:
     def __init__(
         self,
         exchange_api: DeribitAPI,
@@ -337,16 +337,16 @@ async def main():
 
     exchange_api = DeribitAPI()
     vol_engine = VolatilityEngine()
-    currencies = ["ETH"]
+    currencies = ["BTC"]
 
-    worker = MarketDataWorker(
+    worker = MarketDataEngine(
         exchange_api=exchange_api,
         vol_engine=vol_engine,
         settings=settings,
         currencies=currencies,
     )
 
-    await worker.run(interval_minutes=1)
+    await worker.run(interval_minutes=5)
 
 
 if __name__ == "__main__":

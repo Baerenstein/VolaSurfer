@@ -1,7 +1,7 @@
 import pytest
 import requests
 from unittest.mock import Mock, patch
-from data_access.exchanges.deribit import DeribitAPI
+from data.exchanges.deribit import DeribitAPI
 
 
 @pytest.fixture

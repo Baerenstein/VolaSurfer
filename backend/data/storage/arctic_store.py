@@ -5,8 +5,8 @@ import pandas as pd
 from collections import defaultdict
 from typing import Optional
 
-from data_access.storage.base_store import BaseStore
-from data_access.utils.data_schemas import VolSurface
+from data.storage.base_store import BaseStore
+from data.utils.data_schemas import VolSurface
 
 
 class ArcticStore(BaseStore):

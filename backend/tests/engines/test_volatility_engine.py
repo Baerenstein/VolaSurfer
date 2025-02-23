@@ -1,6 +1,6 @@
 import pytest
 from datetime import datetime, timedelta
-from core.volatility_engine import VolatilityEngine
+from backend.core.VolatilityEngine import VolatilityEngine
 
 
 @pytest.fixture

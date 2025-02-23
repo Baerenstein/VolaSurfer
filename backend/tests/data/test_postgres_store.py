@@ -1,7 +1,7 @@
 import pytest
 import pandas as pd
 from datetime import datetime, timedelta
-from data_access.storage.postgres_store import PostgresStore
+from data.storage.postgres_store import PostgresStore
 
 
 @pytest.fixture(scope="module")

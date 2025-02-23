@@ -7,8 +7,8 @@ from psycopg2 import extras
 from typing import List, Optional
 import warnings
 
-from data_access.storage.base_store import BaseStore
-from data_access.utils.data_schemas import OptionContract, VolSurface, VolMetrics
+from data.storage.base_store import BaseStore
+from data.utils.data_schemas import OptionContract, VolSurface, VolMetrics
 
 warnings.filterwarnings(
     "ignore", message=".*pandas only supports SQLAlchemy connectable.*"

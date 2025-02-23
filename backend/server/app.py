@@ -7,9 +7,9 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from infrastructure.settings import Settings
-from data_access.storage import StorageFactory
-from data_access.utils.data_schemas import OptionContract
-from data_access.utils.surface_helper import interpolate_surface, InterpolationMethod
+from data.storage import StorageFactory
+from data.utils.data_schemas import OptionContract
+from data.utils.surface_helper import interpolate_surface, InterpolationMethod
 
 
 # Add the backend directory to the sys.path
