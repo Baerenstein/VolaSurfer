@@ -35,8 +35,13 @@ class PostgresStore(BaseStore):
         self.initialize_assets_table()
         self.initialize_options_data_table()
         self.initialize_underlying_data_table()
-        self.initialize_vol_surface_table()
-        self.initialize_vol_surface_points_table()
+        self.initialize_volatility_metrics_table()
+        self.initialize_surfaces_table()
+        self.initialize_surface_points_table()
+        self.initialize_models_table()
+        self.initialize_model_parameters_table()
+        self.initialize_model_surfaces_table()
+        self.initialize_model_surface_points_table()
 
     def initialize_assets_table(self):
         """Create assets table"""
@@ -44,8 +49,8 @@ class PostgresStore(BaseStore):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS assets (
                     id SERIAL PRIMARY KEY,
-                    asset_type VARCHAR NOT NULL,  -- e.g., 'equity', 'crypto'
-                    ticker VARCHAR NOT NULL UNIQUE  -- Unique ticker for the asset
+                    asset_type VARCHAR NOT NULL,
+                    ticker VARCHAR NOT NULL UNIQUE
                 )
             """)
 
@@ -56,7 +61,7 @@ class PostgresStore(BaseStore):
                 CREATE TABLE IF NOT EXISTS options_data (
                     id SERIAL PRIMARY KEY,
                     timestamp TIMESTAMP,
-                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
                     symbol VARCHAR,
                     strike DOUBLE PRECISION,
                     moneyness DOUBLE PRECISION,
@@ -80,33 +85,52 @@ class PostgresStore(BaseStore):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS underlying_data (
                     id SERIAL PRIMARY KEY,
-                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
                     symbol VARCHAR,
                     price DOUBLE PRECISION,
                     timestamp TIMESTAMP
                 )
             """)
 
-    def initialize_vol_surface_table(self):
-        """Create vol_surfaces table with increased VARCHAR length"""
+    def initialize_volatility_metrics_table(self):
+        """Create volatility_metrics table"""
         with self.conn.cursor() as cursor:
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vol_surfaces (
+                CREATE TABLE IF NOT EXISTS volatility_metrics (
                     id SERIAL PRIMARY KEY,
-                    timestamp TIMESTAMP NOT NULL,
-                    method TEXT NOT NULL,
-                    snapshot_id TEXT,
-                    UNIQUE(timestamp, snapshot_id)
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    timestamp TIMESTAMP,
+                    implied_vol_index DOUBLE PRECISION,
+                    historical_vols JSONB,
+                    vol_spread DOUBLE PRECISION,
+                    sample_size INTEGER,
+                    calculation_method VARCHAR,
+                    metadata JSONB
                 )
             """)
 
-    def initialize_vol_surface_points_table(self):
-        """Create vol_surface_points table"""
+    def initialize_surfaces_table(self):
+        """Create surfaces table"""
         with self.conn.cursor() as cursor:
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vol_surface_points (
+                CREATE TABLE IF NOT EXISTS surfaces (
                     id SERIAL PRIMARY KEY,
-                    vol_surface_id INTEGER REFERENCES vol_surfaces(id) ON DELETE CASCADE,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    timestamp TIMESTAMP,
+                    method TEXT NOT NULL,
+                    snapshot_id VARCHAR,
+                    source_type VARCHAR
+                );
+                CREATE INDEX IF NOT EXISTS idx_surfaces_timestamp ON surfaces(timestamp);
+            """)
+
+    def initialize_surface_points_table(self):
+        """Create surface_points table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS surface_points (
+                    id SERIAL PRIMARY KEY,
+                    surface_id INTEGER REFERENCES surfaces(id) ON DELETE CASCADE,
                     strike NUMERIC NOT NULL,
                     moneyness NUMERIC NOT NULL,
                     maturity TIMESTAMP NOT NULL,
@@ -115,6 +139,85 @@ class PostgresStore(BaseStore):
                     option_type VARCHAR NOT NULL
                 )
             """)
+
+    def initialize_models_table(self):
+        """Create models table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS models (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR,
+                    description TEXT,
+                    parameters_schema JSONB
+                )
+            """)
+
+    def initialize_model_parameters_table(self):
+        """Create model_parameters table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_parameters (
+                    id SERIAL PRIMARY KEY,
+                    model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    parameters JSONB,
+                    timestamp TIMESTAMP,
+                    calibration_data JSONB
+                )
+            """)
+
+    def initialize_model_surfaces_table(self):
+        """Create model_surfaces table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_surfaces (
+                    id SERIAL PRIMARY KEY,
+                    model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    timestamp TIMESTAMP,
+                    parameters_id INTEGER REFERENCES model_parameters(id) ON DELETE CASCADE,
+                    source_surface_id INTEGER REFERENCES surfaces(id) ON DELETE CASCADE
+                )
+            """)
+
+    def initialize_model_surface_points_table(self):
+        """Create model_surface_points table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_surface_points (
+                    id SERIAL PRIMARY KEY,
+                    model_surface_id INTEGER REFERENCES model_surfaces(id) ON DELETE CASCADE,
+                    strike NUMERIC NOT NULL,
+                    moneyness NUMERIC NOT NULL,
+                    maturity TIMESTAMP NOT NULL,
+                    days_to_expiry NUMERIC NOT NULL,
+                    implied_vol NUMERIC NOT NULL,
+                    option_type VARCHAR NOT NULL
+                )
+            """)
+
+    def store_underlying(self, last_price: float, asset_type: str, symbol: str):
+        """Store underlying asset data"""
+        asset_type = self.get_or_create_asset(asset_type, symbol)
+        underlying_df = pd.DataFrame(
+            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
+        )
+        with self.conn.cursor() as cursor:
+            for _, row in underlying_df.iterrows():
+                cursor.execute(
+                    """
+                    INSERT INTO underlying_data (asset_id, symbol, price, timestamp)
+                    VALUES (%s, %s, %s, %s)
+                    """,
+                    (row["asset_id"], row["symbol"], row["price"], row["timestamp"]),
+                )
+        self.conn.commit()
+
+    def get_underlying_data(self, symbol: str) -> pd.DataFrame:
+        """Retrieve the latest underlying data for a symbol"""
+        query = "SELECT * FROM underlying_data WHERE symbol = %s"
+        df = pd.read_sql_query(query, self.conn, params=(symbol,))
+        return df
 
     def store_options_chain(self, options_df: pd.DataFrame):
         """Store options chain data with limited decimal places"""
@@ -177,51 +280,29 @@ class PostgresStore(BaseStore):
         ]
         return contracts
 
-    def store_underlying(self, last_price: float, asset_type: str, symbol: str):
-        """Store underlying asset data"""
-        asset_type = self.get_or_create_asset(asset_type, symbol)
-        underlying_df = pd.DataFrame(
-            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
-        )
-        with self.conn.cursor() as cursor:
-            for _, row in underlying_df.iterrows():
-                cursor.execute(
-                    """
-                    INSERT INTO underlying_data (asset_id, symbol, price, timestamp)
-                    VALUES (%s, %s, %s, %s)
-                    """,
-                    (row["asset_id"], row["symbol"], row["price"], row["timestamp"]),
-                )
-        self.conn.commit()
-
-    def get_underlying_data(self, symbol: str) -> pd.DataFrame:
-        """Retrieve the latest underlying data for a symbol"""
-        query = "SELECT * FROM underlying_data WHERE symbol = %s"
-        df = pd.read_sql_query(query, self.conn, params=(symbol,))
-        return df
-
-    def store_vol_surface(self, vol_surface: VolSurface) -> int:
-        """Store volatility surface with limited decimal places"""
+    def store_surface(self, vol_surface: VolSurface) -> int:
+        """Store for surfaces"""
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO vol_surfaces (timestamp, method, snapshot_id)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO surfaces (timestamp, method, snapshot_id, asset_id)
+                    VALUES (%s, %s, %s, %s)
                     RETURNING id
-                """,
+                    """,
                     (
                         vol_surface.timestamp,
                         vol_surface.method,
                         vol_surface.snapshot_id,
+                        vol_surface.asset_id,
                     ),
                 )
 
-                vol_surface_id = cur.fetchone()[0]
+                surface_id = cur.fetchone()[0]
 
                 points_data = [
                     (
-                        vol_surface_id,
+                        surface_id,
                         self._limit_decimals(strike),
                         self._limit_decimals(moneyness),
                         maturity,
@@ -242,8 +323,8 @@ class PostgresStore(BaseStore):
                 extras.execute_values(
                     cur,
                     """
-                    INSERT INTO vol_surface_points 
-                        (vol_surface_id, strike, moneyness, maturity, days_to_expiry, implied_vol, option_type)
+                    INSERT INTO surface_points 
+                        (surface_id, strike, moneyness, maturity, days_to_expiry, implied_vol, option_type)
                     VALUES %s
                     """,
                     points_data,
@@ -251,18 +332,17 @@ class PostgresStore(BaseStore):
                 )
 
                 self.conn.commit()
-                return vol_surface_id
+                return surface_id
 
         except Exception as e:
             self.conn.rollback()
-            raise RuntimeError(f"Failed to store vol surface: {str(e)}")
+            raise RuntimeError(f"Failed to store surface: {str(e)}")
 
-    # VolSurface TODO: add option type parameter
     def get_vol_surfaces(
         self, timestamp: datetime, snapshot_id: Optional[str] = None
     ) -> VolSurface:
         """
-        Retrieve a VolSurface object from the database.
+        Retrieve a VolSurface object from the surfaces table.
 
         Args:
             timestamp: Timestamp to retrieve
@@ -273,16 +353,16 @@ class PostgresStore(BaseStore):
         """
         with self.conn.cursor() as cur:
             query = """
-                SELECT vsp.strike, vsp.moneyness, vsp.maturity, vsp.days_to_expiry, 
-                    vsp.implied_vol, vsp.option_type, vs.method
-                FROM vol_surfaces vs
-                JOIN vol_surface_points vsp ON vs.id = vsp.vol_surface_id
-                WHERE vs.timestamp = %s
+                SELECT sp.strike, sp.moneyness, sp.maturity, sp.days_to_expiry, 
+                    sp.implied_vol, sp.option_type, s.method
+                FROM surfaces s
+                JOIN surface_points sp ON s.id = sp.surface_id
+                WHERE s.timestamp = %s
             """
             params = [timestamp]
 
             if snapshot_id:
-                query += " AND vs.snapshot_id = %s"
+                query += " AND s.snapshot_id = %s"
                 params.append(snapshot_id)
 
             cur.execute(query, params)
@@ -310,60 +390,6 @@ class PostgresStore(BaseStore):
                 snapshot_id=snapshot_id,
             )
 
-    def get_current_vol_surface(self) -> VolSurface:
-        """
-        Retrieve the most recent VolSurface object from the database.
-        Returns float values instead of Decimal.
-        """
-        with self.conn.cursor() as cur:
-            cur.execute("""
-                SELECT timestamp, snapshot_id 
-                FROM vol_surfaces 
-                ORDER BY timestamp DESC 
-                LIMIT 1
-            """)
-            latest = cur.fetchone()
-
-            if not latest:
-                return None
-
-            latest_timestamp, latest_snapshot_id = latest
-
-            query = """
-                SELECT vsp.strike::float, vsp.moneyness::float, vsp.maturity, 
-                    vsp.days_to_expiry::float, vsp.implied_vol::float, vsp.option_type, 
-                    vs.method
-                FROM vol_surfaces vs
-                JOIN vol_surface_points vsp ON vs.id = vsp.vol_surface_id
-                WHERE vs.timestamp = %s AND vs.snapshot_id = %s
-            """
-
-            cur.execute(query, (latest_timestamp, latest_snapshot_id))
-            rows = cur.fetchall()
-
-            if not rows:
-                return None
-
-            strikes = [row[0] for row in rows]
-            moneyness = [row[1] for row in rows]
-            maturities = [row[2] for row in rows]
-            days_to_expiry = [row[3] for row in rows]
-            implied_vols = [row[4] for row in rows]
-            option_type = [row[5] for row in rows]
-            method = rows[0][6]
-
-            return VolSurface(
-                timestamp=latest_timestamp,
-                method=method,
-                strikes=strikes,
-                moneyness=moneyness,
-                maturities=maturities,
-                days_to_expiry=days_to_expiry,
-                implied_vols=implied_vols,
-                option_type=option_type,
-                snapshot_id=latest_snapshot_id,
-            )
-
     def get_latest_vol_surface(self):
         """
         Retrieve the latest volatility surface data for calls, including timestamp for logging.
@@ -374,7 +400,7 @@ class PostgresStore(BaseStore):
             query = """
             WITH latest_surface AS (
                 SELECT id, timestamp
-                FROM vol_surfaces
+                FROM surfaces
                 ORDER BY timestamp DESC
                 LIMIT 1
             )
@@ -383,8 +409,8 @@ class PostgresStore(BaseStore):
                 vsp.moneyness::float,
                 vsp.days_to_expiry::float,
                 vsp.implied_vol::float
-            FROM vol_surface_points vsp
-            INNER JOIN latest_surface ls ON vsp.vol_surface_id = ls.id
+            FROM surface_points vsp
+            INNER JOIN latest_surface ls ON vsp.surface_id = ls.id
             WHERE vsp.option_type = 'c'
             ORDER BY vsp.days_to_expiry, vsp.moneyness;
             """

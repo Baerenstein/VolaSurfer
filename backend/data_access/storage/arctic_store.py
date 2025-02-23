@@ -59,7 +59,6 @@ class ArcticStore(BaseStore):
             print(f"Error reading underlying data for {symbol}: {e}")
             return None
 
-    # VolSurface TODO: add option type parameter
     def store_vol_surface(self, vol_surface: VolSurface, symbol: str) -> str:
         """
         Save a VolSurface object to ArcticDB.
@@ -102,7 +101,6 @@ class ArcticStore(BaseStore):
 
         return key
 
-    # VolSurface TODO: add option type parameter
     def get_vol_surfaces(
         self,
         timestamp: Optional[datetime],

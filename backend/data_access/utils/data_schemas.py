@@ -70,7 +70,6 @@ class UnderlyingAsset:
     volume_24h: Optional[float] = None
 
 
-# TODO
 @dataclass
 class VolPoint:
     strike: float
@@ -85,8 +84,6 @@ class VolPoint:
     greeks: Dict[str, float]
     vol_error: Optional[float]
 
-
-# TODO
 @dataclass
 class VolatilityPoint:
     strike: float
@@ -114,6 +111,19 @@ class VolSurface:
     implied_vols: List[List[float]]
     option_type: List[str]
     snapshot_id: Optional[str] = None
+    asset_id: Optional[str] = None
+
+    def __init__(self, timestamp, method, strikes, moneyness, maturities, days_to_expiry, implied_vols, option_type, snapshot_id, asset_id=None):
+        self.timestamp = timestamp
+        self.method = method
+        self.strikes = strikes
+        self.moneyness = moneyness
+        self.maturities = maturities
+        self.days_to_expiry = days_to_expiry
+        self.implied_vols = implied_vols
+        self.option_type = option_type
+        self.snapshot_id = snapshot_id
+        self.asset_id = asset_id
 
     def to_dict(self):
         return {
@@ -128,7 +138,6 @@ class VolSurface:
         }
 
 
-# TODO
 @dataclass
 class VolMetrics:
     timestamp: datetime
@@ -137,70 +146,3 @@ class VolMetrics:
     put_call_skew: float
     wing_risk_metrics: Dict[str, float]
     historical_percentiles: Dict[str, float]
-
-
-# TODO refactor to use dataclass
-# from dataclasses import dataclass
-# from datetime import datetime
-# from typing import Optional, Dict, List, Union
-
-# # Base Metadata Class
-# @dataclass
-# class BaseMetadata:
-#     timestamp: datetime
-#     snapshot_id: Optional[str] = None
-
-# # Separate Greeks Management
-# @dataclass
-# class Greeks:
-#     delta: Optional[float] = None
-#     gamma: Optional[float] = None
-#     vega: Optional[float] = None
-#     theta: Optional[float] = None
-
-# # Pricing Information
-# @dataclass
-# class PricingInfo:
-#     last_price: float
-#     bid_price: Optional[float] = None
-#     ask_price: Optional[float] = None
-
-# # Specialized Option Contract
-# @dataclass
-# class OptionContract(BaseMetadata, PricingInfo, Greeks):
-#     symbol: str
-#     expiry_date: datetime
-#     strike: float
-#     option_type: str
-#     base_currency: str
-#     days_to_expiry: int
-#     moneyness: float
-#     implied_vol: float
-#     open_interest: Optional[float] = None
-
-# # Volatility Point with Modular Design
-# @dataclass
-# class VolPoint(BaseMetadata, Greeks):
-#     strike: float
-#     expiry_date: datetime
-#     moneyness: float
-#     forward: float
-#     implied_vol: float
-#     bid_vol: Optional[float] = None
-#     ask_vol: Optional[float] = None
-#     volume: Optional[int] = None
-#     open_interest: Optional[int] = None
-#     vol_error: Optional[float] = None
-
-# # Advanced Volatility Surface
-# @dataclass
-# class VolSurface(BaseMetadata):
-#     method: str
-#     data: Dict[str, Union[List[float], List[datetime], List[List[float]]]] = None
-
-# # Enhanced Volatility Metrics
-# @dataclass
-# class VolMetrics(BaseMetadata):
-#     avg_vol: float
-#     term_structure_slope: float
-#     metrics: Dict[str, Union[float, Dict[str, float]]] = None
