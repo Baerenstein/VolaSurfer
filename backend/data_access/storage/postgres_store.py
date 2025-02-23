@@ -343,7 +343,7 @@ class PostgresStore(BaseStore):
         self, timestamp: datetime, snapshot_id: Optional[str] = None
     ) -> VolSurface:
         """
-        Retrieve a VolSurface object from the database.
+        Retrieve a VolSurface object from the surfaces table.
 
         Args:
             timestamp: Timestamp to retrieve
@@ -354,16 +354,16 @@ class PostgresStore(BaseStore):
         """
         with self.conn.cursor() as cur:
             query = """
-                SELECT vsp.strike, vsp.moneyness, vsp.maturity, vsp.days_to_expiry, 
-                    vsp.implied_vol, vsp.option_type, vs.method
-                FROM vol_surfaces vs
-                JOIN vol_surface_points vsp ON vs.id = vsp.vol_surface_id
-                WHERE vs.timestamp = %s
+                SELECT sp.strike, sp.moneyness, sp.maturity, sp.days_to_expiry, 
+                    sp.implied_vol, sp.option_type, s.method
+                FROM surfaces s
+                JOIN surface_points sp ON s.id = sp.surface_id
+                WHERE s.timestamp = %s
             """
             params = [timestamp]
 
             if snapshot_id:
-                query += " AND vs.snapshot_id = %s"
+                query += " AND s.snapshot_id = %s"
                 params.append(snapshot_id)
 
             cur.execute(query, params)
@@ -401,7 +401,7 @@ class PostgresStore(BaseStore):
             query = """
             WITH latest_surface AS (
                 SELECT id, timestamp
-                FROM vol_surfaces
+                FROM surfaces
                 ORDER BY timestamp DESC
                 LIMIT 1
             )
@@ -410,8 +410,8 @@ class PostgresStore(BaseStore):
                 vsp.moneyness::float,
                 vsp.days_to_expiry::float,
                 vsp.implied_vol::float
-            FROM vol_surface_points vsp
-            INNER JOIN latest_surface ls ON vsp.vol_surface_id = ls.id
+            FROM surface_points vsp
+            INNER JOIN latest_surface ls ON vsp.surface_id = ls.id
             WHERE vsp.option_type = 'c'
             ORDER BY vsp.days_to_expiry, vsp.moneyness;
             """
