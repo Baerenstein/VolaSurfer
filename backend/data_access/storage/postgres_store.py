@@ -120,7 +120,8 @@ class PostgresStore(BaseStore):
                     method TEXT NOT NULL,
                     snapshot_id VARCHAR,
                     source_type VARCHAR
-                )
+                );
+                CREATE INDEX IF NOT EXISTS idx_surfaces_timestamp ON surfaces(timestamp);
             """)
 
     def initialize_surface_points_table(self):
@@ -279,7 +280,7 @@ class PostgresStore(BaseStore):
         ]
         return contracts
 
-    def store_surface(self, vol_surface: VolSurface) -> int:
+    def store_volatility_surface(self, vol_surface: VolSurface) -> int:
         """Store volatility surface into surfaces table"""
         try:
             with self.conn.cursor() as cur:
