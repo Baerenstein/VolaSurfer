@@ -280,8 +280,8 @@ class PostgresStore(BaseStore):
         ]
         return contracts
 
-    def store_volatility_surface(self, vol_surface: VolSurface) -> int:
-        """Store volatility surface into surfaces table"""
+    def store_surface(self, vol_surface: VolSurface) -> int:
+        """Store for surfaces"""
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
@@ -300,7 +300,6 @@ class PostgresStore(BaseStore):
 
                 surface_id = cur.fetchone()[0]
 
-                # Store surface points if needed
                 points_data = [
                     (
                         surface_id,
