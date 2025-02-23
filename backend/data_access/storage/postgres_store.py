@@ -49,8 +49,8 @@ class PostgresStore(BaseStore):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS assets (
                     id SERIAL PRIMARY KEY,
-                    asset_type VARCHAR NOT NULL,  -- e.g., 'equity', 'crypto'
-                    ticker VARCHAR NOT NULL UNIQUE  -- Unique ticker for the asset
+                    asset_type VARCHAR NOT NULL,
+                    ticker VARCHAR NOT NULL UNIQUE
                 )
             """)
 
@@ -61,7 +61,7 @@ class PostgresStore(BaseStore):
                 CREATE TABLE IF NOT EXISTS options_data (
                     id SERIAL PRIMARY KEY,
                     timestamp TIMESTAMP,
-                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
                     symbol VARCHAR,
                     strike DOUBLE PRECISION,
                     moneyness DOUBLE PRECISION,
@@ -85,7 +85,7 @@ class PostgresStore(BaseStore):
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS underlying_data (
                     id SERIAL PRIMARY KEY,
-                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,  -- Foreign key to assets
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
                     symbol VARCHAR,
                     price DOUBLE PRECISION,
                     timestamp TIMESTAMP
@@ -116,7 +116,6 @@ class PostgresStore(BaseStore):
                 CREATE TABLE IF NOT EXISTS surfaces (
                     id SERIAL PRIMARY KEY,
                     asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
-                    ticker VARCHAR,
                     timestamp TIMESTAMP,
                     method TEXT NOT NULL,
                     snapshot_id VARCHAR,
