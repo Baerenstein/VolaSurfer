@@ -35,8 +35,13 @@ class PostgresStore(BaseStore):
         self.initialize_assets_table()
         self.initialize_options_data_table()
         self.initialize_underlying_data_table()
-        self.initialize_vol_surface_table()
-        self.initialize_vol_surface_points_table()
+        self.initialize_volatility_metrics_table()
+        self.initialize_surfaces_table()
+        self.initialize_surface_points_table()
+        self.initialize_models_table()
+        self.initialize_model_parameters_table()
+        self.initialize_model_surfaces_table()
+        self.initialize_model_surface_points_table()
 
     def initialize_assets_table(self):
         """Create assets table"""
@@ -87,26 +92,101 @@ class PostgresStore(BaseStore):
                 )
             """)
 
-    def initialize_vol_surface_table(self):
-        """Create vol_surfaces table with increased VARCHAR length"""
+    def initialize_volatility_metrics_table(self):
+        """Create volatility_metrics table"""
         with self.conn.cursor() as cursor:
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vol_surfaces (
+                CREATE TABLE IF NOT EXISTS volatility_metrics (
                     id SERIAL PRIMARY KEY,
-                    timestamp TIMESTAMP NOT NULL,
-                    method TEXT NOT NULL,
-                    snapshot_id TEXT,
-                    UNIQUE(timestamp, snapshot_id)
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    timestamp TIMESTAMP,
+                    implied_vol_index DOUBLE PRECISION,
+                    historical_vols JSONB,
+                    vol_spread DOUBLE PRECISION,
+                    sample_size INTEGER,
+                    calculation_method VARCHAR,
+                    metadata JSONB
                 )
             """)
 
-    def initialize_vol_surface_points_table(self):
-        """Create vol_surface_points table"""
+    def initialize_surfaces_table(self):
+        """Create surfaces table"""
         with self.conn.cursor() as cursor:
             cursor.execute("""
-                CREATE TABLE IF NOT EXISTS vol_surface_points (
+                CREATE TABLE IF NOT EXISTS surfaces (
                     id SERIAL PRIMARY KEY,
-                    vol_surface_id INTEGER REFERENCES vol_surfaces(id) ON DELETE CASCADE,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    ticker VARCHAR,
+                    timestamp TIMESTAMP,
+                    method TEXT NOT NULL,
+                    snapshot_id VARCHAR,
+                    source_type VARCHAR
+                )
+            """)
+
+    def initialize_surface_points_table(self):
+        """Create surface_points table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS surface_points (
+                    id SERIAL PRIMARY KEY,
+                    surface_id INTEGER REFERENCES surfaces(id) ON DELETE CASCADE,
+                    strike NUMERIC NOT NULL,
+                    moneyness NUMERIC NOT NULL,
+                    maturity TIMESTAMP NOT NULL,
+                    days_to_expiry NUMERIC NOT NULL,
+                    implied_vol NUMERIC NOT NULL,
+                    option_type VARCHAR NOT NULL
+                )
+            """)
+
+    def initialize_models_table(self):
+        """Create models table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS models (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR,
+                    description TEXT,
+                    parameters_schema JSONB
+                )
+            """)
+
+    def initialize_model_parameters_table(self):
+        """Create model_parameters table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_parameters (
+                    id SERIAL PRIMARY KEY,
+                    model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    parameters JSONB,
+                    timestamp TIMESTAMP,
+                    calibration_data JSONB
+                )
+            """)
+
+    def initialize_model_surfaces_table(self):
+        """Create model_surfaces table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_surfaces (
+                    id SERIAL PRIMARY KEY,
+                    model_id INTEGER REFERENCES models(id) ON DELETE CASCADE,
+                    asset_id INTEGER REFERENCES assets(id) ON DELETE CASCADE,
+                    timestamp TIMESTAMP,
+                    parameters_id INTEGER REFERENCES model_parameters(id) ON DELETE CASCADE,
+                    source_surface_id INTEGER REFERENCES surfaces(id) ON DELETE CASCADE
+                )
+            """)
+
+    def initialize_model_surface_points_table(self):
+        """Create model_surface_points table"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS model_surface_points (
+                    id SERIAL PRIMARY KEY,
+                    model_surface_id INTEGER REFERENCES model_surfaces(id) ON DELETE CASCADE,
                     strike NUMERIC NOT NULL,
                     moneyness NUMERIC NOT NULL,
                     maturity TIMESTAMP NOT NULL,
@@ -200,28 +280,30 @@ class PostgresStore(BaseStore):
         ]
         return contracts
 
-    def store_vol_surface(self, vol_surface: VolSurface) -> int:
-        """Store volatility surface with limited decimal places"""
+    def store_surface(self, vol_surface: VolSurface) -> int:
+        """Store volatility surface into surfaces table"""
         try:
             with self.conn.cursor() as cur:
                 cur.execute(
                     """
-                    INSERT INTO vol_surfaces (timestamp, method, snapshot_id)
-                    VALUES (%s, %s, %s)
+                    INSERT INTO surfaces (timestamp, method, snapshot_id, asset_id)
+                    VALUES (%s, %s, %s, %s)
                     RETURNING id
-                """,
+                    """,
                     (
                         vol_surface.timestamp,
                         vol_surface.method,
                         vol_surface.snapshot_id,
+                        vol_surface.asset_id,
                     ),
                 )
 
-                vol_surface_id = cur.fetchone()[0]
+                surface_id = cur.fetchone()[0]
 
+                # Store surface points if needed
                 points_data = [
                     (
-                        vol_surface_id,
+                        surface_id,
                         self._limit_decimals(strike),
                         self._limit_decimals(moneyness),
                         maturity,
@@ -242,8 +324,8 @@ class PostgresStore(BaseStore):
                 extras.execute_values(
                     cur,
                     """
-                    INSERT INTO vol_surface_points 
-                        (vol_surface_id, strike, moneyness, maturity, days_to_expiry, implied_vol, option_type)
+                    INSERT INTO surface_points 
+                        (surface_id, strike, moneyness, maturity, days_to_expiry, implied_vol, option_type)
                     VALUES %s
                     """,
                     points_data,
@@ -251,13 +333,12 @@ class PostgresStore(BaseStore):
                 )
 
                 self.conn.commit()
-                return vol_surface_id
+                return surface_id
 
         except Exception as e:
             self.conn.rollback()
-            raise RuntimeError(f"Failed to store vol surface: {str(e)}")
+            raise RuntimeError(f"Failed to store surface: {str(e)}")
 
-    # VolSurface TODO: add option type parameter
     def get_vol_surfaces(
         self, timestamp: datetime, snapshot_id: Optional[str] = None
     ) -> VolSurface:

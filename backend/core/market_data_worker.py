@@ -9,7 +9,7 @@ from data_access.exchanges.deribit import DeribitAPI
 from core.volatility_engine import VolatilityEngine
 from data_access.storage import StorageFactory
 from infrastructure.utils.logging import setup_logger
-from data_access.utils.data_schemas import OptionContract, MarketState
+from data_access.utils.data_schemas import OptionContract, MarketState, VolSurface
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
@@ -227,11 +227,14 @@ class MarketDataWorker:
                 )
 
                 if vol_surface:
-                    print(f"{datetime.now()}: Storing vol_surface")
+                    print(f"{datetime.now()}: Storing surface")
 
-                    self.store.store_vol_surface(vol_surface)
+                    # Assign asset_id to the vol_surface
+                    vol_surface.asset_id = asset_id  # Ensure asset_id is set correctly
 
-                    print(f"{datetime.now()}: Retrieving vol surface from storage")
+                    self.store.store_surface(vol_surface)  # Store the surface with asset_id
+
+                    print(f"{datetime.now()}: Retrieving surface from storage")
 
                     retrieved_surface = self.store.get_vol_surfaces(
                         vol_surface.timestamp, vol_surface.snapshot_id
@@ -239,7 +242,7 @@ class MarketDataWorker:
 
                     if retrieved_surface:
                         print(
-                            f"{datetime.now()}: Successfully retrieved volatility surface"
+                            f"{datetime.now()}: Successfully retrieved surface"
                         )
 
                     else:
@@ -248,7 +251,7 @@ class MarketDataWorker:
                         )
                 else:
                     print(
-                        f"{datetime.now()}: Warning - No volatility surface generated"
+                        f"{datetime.now()}: Warning - No surface generated"
                     )
 
         except ValueError as ve:
