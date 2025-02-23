@@ -229,10 +229,11 @@ class MarketDataWorker:
                 if vol_surface:
                     print(f"{datetime.now()}: Storing surface")
 
-                    # Assign asset_id to the vol_surface
-                    vol_surface.asset_id = asset_id  # Ensure asset_id is set correctly
+                    if asset_id is None:
+                        raise ValueError(f"Failed to get or create asset_id for {currency}")
+                    vol_surface.asset_id = asset_id
 
-                    self.store.store_surface(vol_surface)  # Store the surface with asset_id
+                    self.store.store_surface(vol_surface)
 
                     print(f"{datetime.now()}: Retrieving surface from storage")
 
