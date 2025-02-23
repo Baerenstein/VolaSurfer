@@ -15,7 +15,7 @@ VolaSurfer is a suite of options analysis tools designed for volatility analysis
 ## Prerequisites
 
 - Python 3.11.9
-- PostgreSQL 15+ (for primary data storage)
+- PostgreSQL 14 (for primary data storage)
 
 ## Installation
 
