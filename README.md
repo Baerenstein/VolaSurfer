@@ -42,7 +42,7 @@ pip install -r requirements.txt
 
 5. Run the data worker to collect data:
 ```bash
-python -m business_logic.market_data_worker
+python -m core.MarketDataEngine
 ```
 
 6. Start the backend server:

@@ -2,7 +2,7 @@ from datetime import datetime
 import sys
 import os
 from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
@@ -10,6 +10,7 @@ from infrastructure.settings import Settings
 from data.storage import StorageFactory
 from data.utils.data_schemas import OptionContract
 from data.utils.surface_helper import interpolate_surface, InterpolationMethod
+import asyncio
 
 
 # Add the backend directory to the sys.path
@@ -108,6 +109,22 @@ async def get_latest_vol_surface(
             detail=f"Error interpolating surface: {str(e)}"
         )
 
+@app.websocket("/ws/latest-vol-surface")
+async def websocket_latest_vol_surface(websocket: WebSocket):
+    await websocket.accept()
+    try:
+        while True:
+            # Here you would typically fetch the latest surface data
+            surface_data = store.get_latest_vol_surface()
+            if surface_data is not None:
+                await websocket.send_json(surface_data)
+            await asyncio.sleep(1)  # Adjust the frequency of updates as needed
+    except WebSocketDisconnect:
+        print("Client disconnected")
+    except Exception as e:
+        print(f"Error in WebSocket connection: {str(e)}")
+    finally:
+        await websocket.close()
 
 @app.get("/health")
 async def health_check():
