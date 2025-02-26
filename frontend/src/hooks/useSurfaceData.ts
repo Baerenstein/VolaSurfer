@@ -1,10 +1,12 @@
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { SurfaceData } from '../types/surface';
 
 const API_CONFIG = {
   baseUrl: 'http://127.0.0.1:8000/api/v1',
+  wsBaseUrl: 'ws://127.0.0.1:8000/api/v1',
   endpoints: {
     volSurface: '/latest-vol-surface',
+    volSurfaceWs: '/ws/latest-vol-surface',
   },
   defaultHeaders: {
     'Content-Type': 'application/json',
@@ -12,91 +14,72 @@ const API_CONFIG = {
 };
 
 export function useSurfaceData() {
-  const [state, setState] = useState<SurfaceState>({
-    isLoading: false,
+  const [state, setState] = useState({
+    isLoading: true,
     error: null,
     data: null,
   });
 
-  const fetchSurfaceData = useCallback(async () => {
-    console.log('Fetching surface data');
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
+  useEffect(() => {
+    const wsUrl = `${API_CONFIG.wsBaseUrl}${API_CONFIG.endpoints.volSurfaceWs}?method=nearest`;
+    console.log('Connecting to WebSocket:', wsUrl);
 
-    try {
-      const requestUrl = `${API_CONFIG.baseUrl}${API_CONFIG.endpoints.volSurface}?method=nearest`;
-      console.log('Request URL:', requestUrl);
+    const socket = new WebSocket(wsUrl);
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5000);
+    socket.onopen = () => {
+      console.log('WebSocket connection established');
+      setState(prev => ({ ...prev, isLoading: true }));
+    };
 
-      const response = await fetch(requestUrl, {
-        headers: API_CONFIG.defaultHeaders,
-        signal: controller.signal,
-        mode: 'cors',
-      });
-
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        const errorBody = await response.text();
-        console.error('Server response:', {
-          status: response.status,
-          statusText: response.statusText,
-          body: errorBody,
-        });
-        throw new Error(`Server error: ${response.status} ${response.statusText}\n${errorBody}`);
-      }
-
-      const rawData = await response.json();
-      console.log('Raw data received:', rawData);
-      
-      // Validate the required fields
-      if (!rawData.moneyness || !rawData.days_to_expiry || !rawData.implied_vols || !rawData.timestamp) {
-        throw new Error('Missing required fields in server response');
-      }
-
-      const surfaceData: SurfaceData = {
-        timestamp: rawData.timestamp,
-        moneyness: rawData.moneyness,
-        daysToExpiry: rawData.days_to_expiry,
-        impliedVols: rawData.implied_vols,
-        interpolationMethod: rawData.interpolation_method || 'nearest'
-      };
-
-      setState({
-        isLoading: false,
-        error: null,
-        data: surfaceData,
-      });
-    } catch (error) {
-      console.error('Error fetching surface data:', {
-        error,
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined,
-      });
-
-      let errorMessage = 'An unknown error occurred';
-      
-      if (error instanceof Error) {
-        if (error.name === 'AbortError') {
-          errorMessage = 'Request timed out';
-        } else if (error.message.includes('Failed to fetch')) {
-          errorMessage = 'Could not connect to server. Please check if the backend is running.';
-        } else {
-          errorMessage = error.message;
+    socket.onmessage = (event) => {
+      try {
+        const rawData = JSON.parse(event.data);
+        if (!rawData.moneyness || !rawData.days_to_expiry || !rawData.implied_vols || !rawData.timestamp) {
+          throw new Error('Missing required fields in server response');
         }
-      }
 
+        const surfaceData: SurfaceData = {
+          timestamp: rawData.timestamp,
+          moneyness: rawData.moneyness,
+          daysToExpiry: rawData.days_to_expiry,
+          impliedVols: rawData.implied_vols,
+          interpolationMethod: rawData.interpolation_method || 'nearest',
+        };
+
+        setState({
+          isLoading: false,
+          error: null,
+          data: surfaceData,
+        });
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+        setState({
+          isLoading: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+          data: null,
+        });
+      }
+    };
+
+    socket.onerror = (error) => {
+      console.error('WebSocket error:', error);
       setState({
         isLoading: false,
-        error: errorMessage,
+        error: 'WebSocket connection error',
         data: null,
       });
-    }
+    };
+
+    socket.onclose = (event) => {
+      console.warn('WebSocket connection closed:', event);
+      setState((prev) => ({ ...prev, error: 'WebSocket connection closed' }));
+    };
+
+    return () => {
+      console.log('Closing WebSocket connection');
+      socket.close();
+    };
   }, []);
 
-  return {
-    ...state,
-    refetch: fetchSurfaceData,
-  };
+  return state;
 }
