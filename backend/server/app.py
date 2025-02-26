@@ -109,22 +109,39 @@ async def get_latest_vol_surface(
             detail=f"Error interpolating surface: {str(e)}"
         )
 
-@app.websocket("/ws/latest-vol-surface")
+@app.websocket("/api/v1/ws/latest-vol-surface")
 async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
+
+    # # get the "method" query parameter, defaults to "nearest"
+    params = websocket.query_params
+    method = params.get("method", "nearest")
+
+    if method.upper() not in [i for i in InterpolationMethod.__members__.keys()]:
+        await websocket.send_json({"error": "Invalid interpolation method"})
+        await websocket.close()
+        return
+
+    method = InterpolationMethod.__members__[method.upper()]
+
+    client_connected = True
     try:
         while True:
             # Here you would typically fetch the latest surface data
             surface_data = store.get_latest_vol_surface()
+            interpolated_data = interpolate_surface(surface_data, InterpolationMethod.NEAREST)
             if surface_data is not None:
-                await websocket.send_json(surface_data)
+                await websocket.send_json(interpolated_data)
             await asyncio.sleep(1)  # Adjust the frequency of updates as needed
     except WebSocketDisconnect:
         print("Client disconnected")
+        client_connected = False
     except Exception as e:
         print(f"Error in WebSocket connection: {str(e)}")
+        # print(str(e.__traceback__))
     finally:
-        await websocket.close()
+        if client_connected:
+            await websocket.close()
 
 @app.get("/health")
 async def health_check():
