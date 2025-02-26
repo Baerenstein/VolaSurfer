@@ -119,10 +119,6 @@ const VolaHeatContent: React.FC<ReturnType<typeof useSurfaceData>> = ({
 const SurfacePage: React.FC = () => {
   const surfaceData = useSurfaceData();
 
-  useEffect(() => {
-    surfaceData.refetch();
-  }, [surfaceData.refetch]);
-
   return (
     <div className="flex flex-col w-full min-h-screen bg-gray-100">
       <div className="flex flex-1 p-4">
@@ -203,13 +199,7 @@ const SurfacePage: React.FC = () => {
         <Container title="VolaHeat">
           <VolaHeatContent {...surfaceData} />
         </Container>
-        
-        <button 
-          onClick={surfaceData.refetch} 
-          className="mt-4 px-2 py-1 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition text-sm"
-        >
-          Refresh Data
-        </button>
+
       </div>
     </div>
   );
