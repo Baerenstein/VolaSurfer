@@ -132,7 +132,7 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
             interpolated_data = interpolate_surface(surface_data, InterpolationMethod.NEAREST)
             if surface_data is not None:
                 await websocket.send_json(interpolated_data)
-            await asyncio.sleep(1)  # Adjust the frequency of updates as needed
+            await asyncio.sleep(5)  # Adjust the frequency of updates as needed
     except WebSocketDisconnect:
         print("Client disconnected")
         client_connected = False

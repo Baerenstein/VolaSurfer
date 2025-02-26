@@ -17,14 +17,10 @@ const Container: React.FC<ContainerProps> = ({ title, children }) => (
   </div>
 );
 
-// Memoized Plot Component (Only updates when shouldRender is true)
-const MemoizedPlot = memo(({ data, layout, onScroll }: { data: any; layout: any; onScroll: () => void }) => {
+// Memoized Plot Component
+const MemoizedPlot = memo(({ data, layout }: { data: any; layout: any }) => {
   return (
-    <div 
-      onWheel={onScroll} // Detects scrolling inside the plot container
-      onTouchMove={onScroll} // Captures scrolling on mobile (touch-based)
-      className="overflow-hidden"
-    >
+    <div className="overflow-hidden">
       <Plot
         data={data}
         layout={layout}
@@ -41,36 +37,36 @@ const MemoizedPlot = memo(({ data, layout, onScroll }: { data: any; layout: any;
     </div>
   );
 }, (prevProps, nextProps) => {
-  return !nextProps.shouldRender; // Prevent re-renders unless shouldRender is true
+  return !nextProps.shouldRender; // Prevent unnecessary updates
 });
 
 const SurfacePage: React.FC = () => {
   const surfaceData = useSurfaceData();
   const [shouldRender, setShouldRender] = useState(false);
-  const [mouseDown, setMouseDown] = useState(false);
-  const [scrolling, setScrolling] = useState(false);
 
-  const scrollTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 🔥 useRef instead of useState to avoid re-renders
+  const scrollingRef = useRef(false);
+  const mouseDownRef = useRef(false);
+  const timeoutRef = useRef<number | null>(null);
 
-  // Event handlers for mouse interactions
-  const handleMouseDown = useCallback(() => setMouseDown(true), []);
-  const handleMouseUp = useCallback(() => setMouseDown(false), []);
-
-  // Detect scrolling inside the Plotly chart
-  const handleScroll = () => {
-    setScrolling(true);
-    if (scrollTimeout.current) clearTimeout(scrollTimeout.current);
-    scrollTimeout.current = setTimeout(() => setScrolling(false), 1000); // Reset after 300ms
+  // Optimized Mouse Down & Up Handlers (No re-renders)
+  const handleMouseDown = () => {
+    mouseDownRef.current = true;
   };
 
-  useEffect(() => {
-    document.addEventListener('mousedown', handleMouseDown);
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => {
-      document.removeEventListener('mousedown', handleMouseDown);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-  }, []);
+  const handleMouseUp = () => {
+    mouseDownRef.current = false;
+  };
+
+  // Optimized Scroll Handler (Throttled)
+  const handleScroll = () => {
+    scrollingRef.current = true; // Flag as scrolling (no re-render)
+
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = window.setTimeout(() => {
+      scrollingRef.current = false; // Reset after 300ms
+    }, 300);
+  };
 
   const cameraRef = useRef({
     eye: { x: 2, y: 2, z: 1.5 },
@@ -93,13 +89,14 @@ const SurfacePage: React.FC = () => {
     uirevision: stableRevisionId.current,
   });
 
+  // 🔥 Only re-render when both scrolling & mouseDown are inactive
   useEffect(() => {
-    if (surfaceData.data === null || mouseDown || scrolling) {
+    if (surfaceData.data === null || mouseDownRef.current || scrollingRef.current) {
       setShouldRender(false);
     } else {
       setShouldRender(true);
     }
-  }, [surfaceData.data, mouseDown, scrolling]);
+  }, [surfaceData.data]);
 
   return (
     <div className="flex flex-col w-full min-h-screen bg-gray-100">
@@ -107,44 +104,47 @@ const SurfacePage: React.FC = () => {
         <Container title="VolaSurfer">
           {surfaceData.isLoading && <div>Loading...</div>}
           {surfaceData.error && <div className="text-red-500">{surfaceData.error}</div>}
-          {(
-            <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-200">
-                <h3 className="text-lg font-semibold text-gray-800">Surface</h3>
-              </div>
-              <div className="p-4">
-                <MemoizedPlot 
-                  data={[
-                    {
-                      type: 'surface',
-                      x: surfaceData.data?.moneyness || [],
-                      y: surfaceData.data?.daysToExpiry || [],
-                      z: surfaceData.data?.impliedVols?.map(row => row.map(vol => vol / 100)) || [],
-                      showscale: true,
-                      colorscale: "Viridis",
-                      contours: {
-                        z: {
-                          show: true,
-                          usecolormap: true,
-                          highlightcolor: "#42f462",
-                          project: { z: true },
-                        },
-                      },
-                      opacity: 1,
-                      hoverongaps: false,
-                      hoverlabel: {
-                        bgcolor: "#FFF",
-                        font: { color: "#000" },
+          <div 
+            className="bg-white rounded-lg shadow-lg overflow-hidden"
+            onWheel={handleScroll} // 🔥 Detect scroll without re-rendering
+            onTouchMove={handleScroll} // 🔥 Mobile scroll detection
+            onMouseDown={handleMouseDown} // 🔥 Detect mouse press
+            onMouseUp={handleMouseUp} // 🔥 Detect mouse release
+          >
+            <div className="px-6 py-4 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-800">Surface</h3>
+            </div>
+            <div className="p-4">
+              <MemoizedPlot 
+                data={[
+                  {
+                    type: 'surface',
+                    x: surfaceData.data?.moneyness || [],
+                    y: surfaceData.data?.daysToExpiry || [],
+                    z: surfaceData.data?.impliedVols?.map(row => row.map(vol => vol / 100)) || [],
+                    showscale: true,
+                    colorscale: "Viridis",
+                    contours: {
+                      z: {
+                        show: true,
+                        usecolormap: true,
+                        highlightcolor: "#42f462",
+                        project: { z: true },
                       },
                     },
-                  ]}
-                  layout={layout}
-                  shouldRender={shouldRender}
-                  onScroll={handleScroll} // Pass scroll handler
-                />
-              </div>
+                    opacity: 1,
+                    hoverongaps: false,
+                    hoverlabel: {
+                      bgcolor: "#FFF",
+                      font: { color: "#000" },
+                    },
+                  },
+                ]}
+                layout={layout}
+                shouldRender={shouldRender}
+              />
             </div>
-          )}
+          </div>
         </Container>
         <Container title="VolaHeat">
           <VolaHeatContent {...surfaceData} />
