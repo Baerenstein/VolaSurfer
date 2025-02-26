@@ -34,8 +34,6 @@ export function useSurfaceData() {
     socket.onmessage = (event) => {
       try {
         const rawData = JSON.parse(event.data);
-        console.log('WebSocket message received:', rawData);
-
         if (!rawData.moneyness || !rawData.days_to_expiry || !rawData.implied_vols || !rawData.timestamp) {
           throw new Error('Missing required fields in server response');
         }
