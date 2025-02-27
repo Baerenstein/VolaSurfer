@@ -128,6 +128,10 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
         while True:
             # Here you would typically fetch the latest surface data
             surface_data = store.get_latest_vol_surface()
+            if surface_data is None:
+                await websocket.send_json({"error": "Latest volatility surface not found"})
+                await asyncio.sleep(5)
+                continue
             interpolated_data = interpolate_surface(surface_data, method)
             if surface_data is not None:
                 await websocket.send_json(interpolated_data)
