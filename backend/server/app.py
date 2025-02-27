@@ -77,42 +77,45 @@ async def get_options_chain(symbol: str) -> List[dict]:
 
     return JSONResponse(content=options)
 
+
 @app.get("/api/v1/latest-vol-surface")
 async def get_latest_vol_surface(
     method: InterpolationMethod = Query(
         InterpolationMethod.NEAREST,
-        description="Interpolation method to use: raw, cubic, or nearest"
-    )
+        description="Interpolation method to use: raw, cubic, or nearest",
+    ),
 ):
     """
     Retrieve the latest volatility surface with optional interpolation.
-    
+
     Args:
         method: Interpolation method (raw, cubic, or nearest)
-    
+
     Returns:
         JSON response with surface data
     """
     # Get raw data from store
     surface_data = store.get_latest_vol_surface()
     if surface_data is None:
-        raise HTTPException(status_code=404, detail="Latest volatility surface not found")
-    
+        raise HTTPException(
+            status_code=404, detail="Latest volatility surface not found"
+        )
+
     # Apply interpolation if requested
     try:
         interpolated_data = interpolate_surface(surface_data, method)
         return JSONResponse(content=interpolated_data)
     except Exception as e:
         raise HTTPException(
-            status_code=500,
-            detail=f"Error interpolating surface: {str(e)}"
+            status_code=500, detail=f"Error interpolating surface: {str(e)}"
         )
+
 
 @app.websocket("/api/v1/ws/latest-vol-surface")
 async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
 
-    # # get the "method" query parameter, defaults to "nearest"
+    # Get the "method" query parameter, defaults to "nearest"
     params = websocket.query_params
     method = params.get("method", "nearest")
 
@@ -129,13 +132,15 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
             # Here you would typically fetch the latest surface data
             surface_data = store.get_latest_vol_surface()
             if surface_data is None:
-                await websocket.send_json({"error": "Latest volatility surface not found"})
+                await websocket.send_json(
+                    {"error": "Latest volatility surface not found"}
+                )
                 await asyncio.sleep(5)
                 continue
             interpolated_data = interpolate_surface(surface_data, method)
-            if surface_data is not None:
-                await websocket.send_json(interpolated_data)
+            await websocket.send_json(interpolated_data)
             await asyncio.sleep(5)  # Adjust the frequency of updates as needed
+
     except WebSocketDisconnect:
         print("Client disconnected")
         client_connected = False
@@ -145,6 +150,7 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
         if client_connected:
             await websocket.close()
 
+
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
@@ -153,4 +159,3 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "version": app.version,
     }
-
