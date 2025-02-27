@@ -1,6 +1,7 @@
 import pytest
 from datetime import datetime, timedelta
-from backend.core.VolatilityEngine import VolatilityEngine
+from core.VolatilityEngine import VolatilityEngine
+from data.utils.data_schemas import VolatilityPoint
 
 
 @pytest.fixture
@@ -105,10 +106,75 @@ def full_surface(volatility_engine, timestamp):
     return volatility_engine
 
 
-def test_add_market_data(basic_surface):
+def test_add_market_data(volatility_engine):
     """Test adding market data to the VolatilityEngine."""
-    assert len(basic_surface.surfaces) == 1
-    assert len(basic_surface.latest_surface.vol_points) == 1
+    timestamp = datetime.now()
+    volatility_engine.add_market_data(
+        timestamp=timestamp,
+        strike=100,
+        moneyness=1.0,
+        option_type="call",
+        expiry_date=timestamp + timedelta(days=30),
+        days_to_expiry=30,
+        implied_vol=0.2,
+        delta=0.5,
+        gamma=0.1,
+        vega=0.2,
+        theta=0.01,
+        snapshot_id="test_snapshot"
+    )
+    assert len(volatility_engine.surfaces_data) == 1
+    assert volatility_engine.surfaces_data[timestamp].vol_points[0].strike == 100
+    assert volatility_engine.surfaces_data[timestamp].vol_points[0].implied_vol == 0.2
+
+
+def test_get_latest_volatility_surface(volatility_engine):
+    """Test retrieving the latest volatility surface."""
+    timestamp = datetime.now()
+    volatility_engine.add_market_data(
+        timestamp=timestamp,
+        strike=100,
+        moneyness=1.0,
+        option_type="call",
+        expiry_date=timestamp + timedelta(days=30),
+        days_to_expiry=30,
+        implied_vol=0.2,
+        delta=0.5,
+        gamma=0.1,
+        vega=0.2,
+        theta=0.01,
+        snapshot_id="test_snapshot"
+    )
+    surface = volatility_engine.get_latest_volatility_surface(snapshot_id="test_snapshot")
+    assert surface is not None
+    assert surface.strikes[0] == 100
+    assert surface.implied_vols[0][0] == 0.2  # Check the implied vol in the surface
+
+
+def test_calculate_surface_metrics(volatility_engine):
+    """Test calculating surface metrics."""
+    timestamp = datetime.now()
+    for i in range(5):
+        volatility_engine.add_market_data(
+            timestamp=timestamp,
+            strike=100 + i * 10,
+            moneyness=1.0 + i * 0.1,
+            option_type="call",
+            expiry_date=timestamp + timedelta(days=30),
+            days_to_expiry=30,
+            implied_vol=0.2 + i * 0.01,
+            delta=0.5,
+            gamma=0.1,
+            vega=0.2,
+            theta=0.01,
+            snapshot_id="test_snapshot"
+        )
+    metrics = volatility_engine.get_surface_metrics()
+    assert metrics is not None
+    assert "avg_skew" in metrics
+    assert "term_structure_slope" in metrics
+    assert metrics["num_points"] == 5  # Check the number of points added
+    assert metrics["avg_vol"] == pytest.approx(0.205, rel=1e-2)  # Check average vol
 
 
 def test_get_volatility_surface(surface_with_skew):
