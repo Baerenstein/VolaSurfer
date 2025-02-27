@@ -1,11 +1,10 @@
 from datetime import datetime
 import sys
 import os
-from typing import List, Optional
+from typing import List
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.encoders import jsonable_encoder
 from infrastructure.settings import Settings
 from data.storage import StorageFactory
 from data.utils.data_schemas import OptionContract
@@ -117,7 +116,7 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
     params = websocket.query_params
     method = params.get("method", "nearest")
 
-    if method.upper() not in [i for i in InterpolationMethod.__members__.keys()]:
+    if method.upper() not in InterpolationMethod.__members__:
         await websocket.send_json({"error": "Invalid interpolation method"})
         await websocket.close()
         return
@@ -138,7 +137,6 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
         client_connected = False
     except Exception as e:
         print(f"Error in WebSocket connection: {str(e)}")
-        # print(str(e.__traceback__))
     finally:
         if client_connected:
             await websocket.close()
