@@ -42,6 +42,7 @@ class PostgresStore(BaseStore):
         self.initialize_model_parameters_table()
         self.initialize_model_surfaces_table()
         self.initialize_model_surface_points_table()
+        self.conn.commit()
 
     def initialize_assets_table(self):
         """Create assets table"""
