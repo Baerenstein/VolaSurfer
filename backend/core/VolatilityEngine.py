@@ -71,12 +71,14 @@ class VolPoints:
             target_expiry_date = (expiry_date - datetime.now()).days
 
             # Interpolate
-            return griddata(
+            result = griddata(
                 (strikes, maturities),
                 vols,
                 (strike, target_expiry_date),
                 method="linear",
             )
+            # Convert numpy array to float if interpolation succeeded
+            return float(result) if result is not None else None
 
         elif method == "cubic":
             # Prepare data
@@ -90,12 +92,14 @@ class VolPoints:
             target_expiry_date = (expiry_date - datetime.now()).days
 
             # Interpolate
-            return griddata(
+            result = griddata(
                 (strikes, maturities),
                 vols,
                 (strike, target_expiry_date),
                 method="cubic",
             )
+            # Convert numpy array to float if interpolation succeeded
+            return float(result) if result is not None else None
 
         else:
             raise ValueError(f"Unsupported interpolation method: {method}")
