@@ -1,282 +1,237 @@
 import pytest
 from datetime import datetime, timedelta
-from backend.core.VolatilityEngine import VolatilityEngine
-
-
-@pytest.fixture
-def timestamp():
-    """Fixture providing a consistent timestamp for tests."""
-    return datetime.now()
-
+import numpy as np
+import pandas as pd
+from core.VolatilityEngine import VolPoints, VolatilityEngine
+from data.utils.data_schemas import VolatilityPoint
 
 @pytest.fixture
-def volatility_engine():
-    """Fixture to create a VolatilityEngine instance for testing."""
-    return VolatilityEngine()
-
+def sample_timestamp():
+    return datetime(2024, 1, 1, 12, 0)
 
 @pytest.fixture
-def basic_surface(volatility_engine, timestamp):
-    """Fixture providing a surface with basic market data."""
-    # Add single point for basic tests
-    volatility_engine.add_market_data(
-        strike=100,
-        expiry_date=timestamp + timedelta(days=30),
+def sample_vol_point(sample_timestamp):
+    return VolatilityPoint(
+        timestamp=sample_timestamp,
+        strike=100.0,
+        moneyness=1.0,
+        expiry_date=sample_timestamp + timedelta(days=30),
+        days_to_expiry=30,
         implied_vol=0.2,
         option_type="call",
-        timestamp=timestamp,
-    )
-    return volatility_engine
-
-
-@pytest.fixture
-def surface_with_skew(volatility_engine, timestamp):
-    """Fixture providing a surface with skew data."""
-    for i in range(10):
-        if i < 3:  # Wing points (25 delta)
-            delta = 0.25
-            implied_vol = 0.25  # Higher vol for wings
-        elif i < 6:  # ATM points
-            delta = 0.5
-            implied_vol = 0.2  # Lower vol for ATM
-        else:  # Other points
-            delta = 0.8 - i * 0.1
-            implied_vol = 0.2 + i * 0.01
-
-        volatility_engine.add_market_data(
-            strike=90 + i * 10,
-            expiry_date=timestamp + timedelta(days=30),
-            implied_vol=implied_vol,
-            option_type="call",
-            timestamp=timestamp,
-            greeks={"delta": delta},
-        )
-    return volatility_engine
-
-
-@pytest.fixture
-def surface_with_term_structure(volatility_engine, timestamp):
-    """Fixture providing a surface with term structure data."""
-    for i in range(10):
-        volatility_engine.add_market_data(
-            strike=100,  # ATM strike
-            expiry_date=timestamp + timedelta(days=30 * (i + 1)),
-            implied_vol=0.15 + i * 0.01,
-            option_type="call",
-            timestamp=timestamp,
-            greeks={"delta": 0.5},  # ATM delta
-        )
-    return volatility_engine
-
-
-@pytest.fixture
-def full_surface(volatility_engine, timestamp):
-    """Fixture providing a surface with both skew and term structure data."""
-    # Add skew points
-    for i in range(10):
-        if i < 3:
-            delta = 0.25
-            implied_vol = 0.25
-        elif i < 6:
-            delta = 0.5
-            implied_vol = 0.2
-        else:
-            delta = 0.8 - i * 0.1
-            implied_vol = 0.2 + i * 0.01
-
-        volatility_engine.add_market_data(
-            strike=90 + i * 10,
-            expiry_date=timestamp + timedelta(days=30),
-            implied_vol=implied_vol,
-            option_type="call",
-            timestamp=timestamp,
-            greeks={"delta": delta},
-        )
-
-        # Add term structure points
-        volatility_engine.add_market_data(
-            strike=100,
-            expiry_date=timestamp + timedelta(days=30 * (i + 1)),
-            implied_vol=0.15 + i * 0.01,
-            option_type="call",
-            timestamp=timestamp,
-            greeks={"delta": 0.5},
-        )
-    return volatility_engine
-
-
-def test_add_market_data(basic_surface):
-    """Test adding market data to the VolatilityEngine."""
-    assert len(basic_surface.surfaces) == 1
-    assert len(basic_surface.latest_surface.vol_points) == 1
-
-
-def test_get_volatility_surface(surface_with_skew):
-    """Test retrieving the volatility surface."""
-    strikes, expiries, vols = surface_with_skew.get_volatility_surface()
-    assert strikes is not None
-    assert expiries is not None
-    assert vols is not None
-    assert len(strikes) == 10
-    assert len(expiries) == 1  # Only one expiry in skew data
-
-
-def test_get_current_skew(surface_with_skew):
-    """Test calculating the current skew."""
-    skew_data = surface_with_skew.get_current_skew()
-    assert skew_data is not None
-    assert len(skew_data) >= 10
-    assert "strike" in skew_data.columns
-    assert "implied_vol" in skew_data.columns
-
-
-def test_calculate_term_structure(surface_with_term_structure):
-    """Test calculating the term structure."""
-    term_structure = surface_with_term_structure.calculate_term_structure()
-    assert term_structure is not None
-    assert len(term_structure) == 10
-    assert "days_to_expiry" in term_structure.columns
-    assert "atm_vol" in term_structure.columns
-    assert list(term_structure["days_to_expiry"]) == sorted(
-        term_structure["days_to_expiry"]
+        delta=0.5,
+        gamma=0.02,
+        vega=0.3,
+        theta=-0.1,
+        snapshot_id="test_snapshot"
     )
 
+class TestVolPoints:
+    def test_init(self, sample_timestamp):
+        vol_points = VolPoints(sample_timestamp)
+        assert vol_points.timestamp == sample_timestamp
+        assert len(vol_points.vol_points) == 0
 
-def test_get_surface_metrics(full_surface):
-    """Test calculating surface metrics."""
-    metrics = full_surface.get_surface_metrics()
+    def test_add_point(self, sample_timestamp, sample_vol_point):
+        vol_points = VolPoints(sample_timestamp)
+        vol_points.add_point(sample_vol_point)
+        assert len(vol_points.vol_points) == 1
+        assert vol_points.vol_points[0] == sample_vol_point
 
-    assert metrics is not None
-    assert "timestamp" in metrics
-    assert metrics["num_points"] == 20
-    assert 0.15 <= metrics["min_vol"] <= 0.3
-    assert 0.15 <= metrics["max_vol"] <= 0.3
-    assert 0.15 <= metrics["avg_vol"] <= 0.3
+    def test_get_interpolated_vol_inverse_distance(self, sample_timestamp):
+        vol_points = VolPoints(sample_timestamp)
+        
+        # Add multiple points for interpolation
+        points = [
+            VolatilityPoint(
+                timestamp=sample_timestamp,
+                strike=strike,
+                moneyness=strike/100,
+                expiry_date=sample_timestamp + timedelta(days=days),
+                days_to_expiry=days,
+                implied_vol=vol,
+                option_type="call"
+            )
+            for strike, days, vol in [
+                (95.0, 25, 0.18),
+                (100.0, 30, 0.20),
+                (105.0, 35, 0.22)
+            ]
+        ]
+        
+        for point in points:
+            vol_points.add_point(point)
 
-    assert metrics["avg_skew"] is not None
-    assert metrics["avg_skew"] > 0
+        # Test interpolation
+        interpolated_vol = vol_points.get_interpolated_vol(
+            strike=100.0,
+            expiry_date=sample_timestamp + timedelta(days=30),
+            method="inverse_distance"
+        )
+        assert isinstance(interpolated_vol, float)
+        assert 0.18 <= interpolated_vol <= 0.22
 
-    assert metrics["term_structure_slope"] is not None
-    assert metrics["term_structure_slope"] > 0
+    def test_get_interpolated_vol_linear(self, sample_timestamp):
+        vol_points = VolPoints(sample_timestamp)
+        
+        # Add multiple points for interpolation in a grid pattern
+        test_points = []
+        for strike in [95.0, 100.0, 105.0]:
+            for days in [25, 30, 35]:
+                # Create a more varied volatility surface
+                base_vol = 0.20
+                strike_adj = (strike - 100.0) * 0.001  # Small adjustment based on strike
+                time_adj = (days - 30) * 0.001  # Small adjustment based on time
+                vol = base_vol + strike_adj + time_adj
+                
+                test_points.append((strike, days, vol))
+        
+        # Create and add the points
+        points = [
+            VolatilityPoint(
+                timestamp=sample_timestamp,
+                strike=strike,
+                moneyness=strike/100,
+                expiry_date=sample_timestamp + timedelta(days=days),
+                days_to_expiry=days,
+                implied_vol=vol,
+                option_type="call"
+            )
+            for strike, days, vol in test_points
+        ]
+        
+        for point in points:
+            vol_points.add_point(point)
 
+        # Test interpolation at a point within the grid
+        interpolated_vol = vol_points.get_interpolated_vol(
+            strike=100.0,
+            expiry_date=sample_timestamp + timedelta(days=30),
+            method="linear"
+        )
+        
+        assert interpolated_vol is not None, "Interpolation should not return None"
+        assert isinstance(interpolated_vol, float), f"Expected float, got {type(interpolated_vol)}"
+        # The interpolated value should be close to the base volatility
+        assert abs(interpolated_vol - 0.20) < 0.01, f"Expected ~0.20, got {interpolated_vol}"
+
+        # Test interpolation outside the grid should return None
+        outside_grid_vol = vol_points.get_interpolated_vol(
+            strike=200.0,  # Way outside the grid
+            expiry_date=sample_timestamp + timedelta(days=30),
+            method="linear"
+        )
+        assert outside_grid_vol is None, "Interpolation outside grid should return None"
+
+    def test_get_interpolated_vol_cubic(self, sample_timestamp):
+        vol_points = VolPoints(sample_timestamp)
+        
+        # Add multiple points in a grid pattern (need more points for cubic interpolation)
+        test_points = []
+        for strike in [90.0, 95.0, 100.0, 105.0, 110.0]:  # Need more points for cubic
+            for days in [20, 25, 30, 35, 40]:  # Need more points for cubic
+                # Create a more complex volatility surface suitable for cubic interpolation
+                base_vol = 0.20
+                strike_adj = (strike - 100.0) * 0.001  # Strike adjustment
+                time_adj = (days - 30) * 0.001  # Time adjustment
+                # Add some curvature to the surface
+                curvature = 0.0001 * (strike - 100.0)**2 + 0.0001 * (days - 30)**2
+                vol = base_vol + strike_adj + time_adj + curvature
+                
+                test_points.append((strike, days, vol))
+        
+        # Create and add the points
+        points = [
+            VolatilityPoint(
+                timestamp=sample_timestamp,
+                strike=strike,
+                moneyness=strike/100,
+                expiry_date=sample_timestamp + timedelta(days=days),
+                days_to_expiry=days,
+                implied_vol=vol,
+                option_type="call"
+            )
+            for strike, days, vol in test_points
+        ]
+        
+        for point in points:
+            vol_points.add_point(point)
+
+        # Test interpolation at a point within the grid
+        interpolated_vol = vol_points.get_interpolated_vol(
+            strike=100.0,
+            expiry_date=sample_timestamp + timedelta(days=30),
+            method="cubic"
+        )
+        
+        assert interpolated_vol is not None, "Cubic interpolation should not return None"
+        assert isinstance(interpolated_vol, float), f"Expected float, got {type(interpolated_vol)}"
+        # The interpolated value should be close to the base volatility at the center
+        assert abs(interpolated_vol - 0.20) < 0.01, f"Expected ~0.20, got {interpolated_vol}"
+
+        # Test interpolation outside the grid should return None
+        outside_grid_vol = vol_points.get_interpolated_vol(
+            strike=200.0,  # Way outside the grid
+            expiry_date=sample_timestamp + timedelta(days=30),
+            method="cubic"
+        )
+        assert outside_grid_vol is None, "Interpolation outside grid should return None"
 
 class TestVolatilityEngine:
-    """Test suite for VolatilityEngine class."""
+    def test_init(self):
+        engine = VolatilityEngine(min_points=10)
+        assert engine.min_points == 10
+        assert len(engine.surfaces_data) == 0
 
-    class TestGetVolatilitySurface:
-        """Tests for get_volatility_surface method."""
+    def test_add_market_data(self, sample_timestamp, sample_vol_point):
+        engine = VolatilityEngine()
+        
+        engine.add_market_data(
+            timestamp=sample_timestamp,
+            strike=sample_vol_point.strike,
+            moneyness=sample_vol_point.moneyness,
+            option_type=sample_vol_point.option_type,
+            expiry_date=sample_vol_point.expiry_date,
+            days_to_expiry=sample_vol_point.days_to_expiry,
+            implied_vol=sample_vol_point.implied_vol,
+            delta=sample_vol_point.delta,
+            gamma=sample_vol_point.gamma,
+            vega=sample_vol_point.vega,
+            theta=sample_vol_point.theta,
+            snapshot_id=sample_vol_point.snapshot_id
+        )
 
-        def test_with_basic_surface(self, basic_surface):
-            """Test with minimal data."""
-            strikes, expiries, vols = basic_surface.get_volatility_surface()
-            assert strikes is None  # Should return None with < min_points
-            assert expiries is None
-            assert vols is None
+        assert len(engine.surfaces_data) == 1
+        assert sample_timestamp in engine.surfaces_data
+        assert len(engine.surfaces_data[sample_timestamp].vol_points) == 1
 
-        def test_with_skew_surface(self, surface_with_skew):
-            """Test with skew data."""
-            strikes, expiries, vols = surface_with_skew.get_volatility_surface()
-            assert strikes is not None
-            assert len(strikes) == 10  # 10 different strikes
-            assert len(expiries) == 1  # Single expiry
-            assert vols.shape == (10, 1)
+    def test_get_latest_volatility_surface(self, sample_timestamp):
+        engine = VolatilityEngine()
+        snapshot_id = "test_snapshot"
 
-        def test_with_term_structure(self, surface_with_term_structure):
-            """Test with term structure data."""
-            strikes, expiries, vols = (
-                surface_with_term_structure.get_volatility_surface()
+        # Add multiple data points
+        for i, strike in enumerate([95.0, 100.0, 105.0]):
+            engine.add_market_data(
+                timestamp=sample_timestamp,
+                strike=strike,
+                moneyness=strike/100,
+                option_type="call",
+                expiry_date=sample_timestamp + timedelta(days=30+i),
+                days_to_expiry=30+i,
+                implied_vol=0.2 + i*0.02,
+                snapshot_id=snapshot_id
             )
-            assert strikes is not None
-            assert len(strikes) == 1  # Single strike
-            assert len(expiries) == 10  # 10 different expiries
-            assert vols.shape == (1, 10)
 
-        def test_with_full_surface(self, full_surface):
-            """Test with complete surface data."""
-            strikes, expiries, vols = full_surface.get_volatility_surface()
-            assert strikes is not None
-            assert len(strikes) == 10
-            assert len(expiries) == 10
-            assert vols.shape == (10, 10)
+        vol_surface = engine.get_latest_volatility_surface(snapshot_id)
+        assert vol_surface is not None
+        assert len(vol_surface.strikes) == 3
+        assert len(vol_surface.implied_vols) == 3
+        assert all(isinstance(vol, float) for vol in vol_surface.implied_vols)
 
-    class TestGetCurrentSkew:
-        """Tests for get_current_skew method."""
-
-        def test_with_basic_surface(self, basic_surface):
-            """Test with insufficient data."""
-            skew = basic_surface.get_current_skew()
-            assert skew is None
-
-        def test_with_term_structure(self, surface_with_term_structure):
-            """Test with only ATM data."""
-            skew = surface_with_term_structure.get_current_skew()
-            # Term structure data has points spread across different maturities,
-            # so we expect None since there aren't enough points near any single expiry
-            assert skew is None
-
-        def test_with_skew_surface(self, surface_with_skew):
-            """Test with proper skew data."""
-            skew = surface_with_skew.get_current_skew()
-            assert skew is not None
-            assert len(skew) >= 10
-            # Verify we have both wing and ATM points
-            deltas = skew["delta"].abs()
-            assert any(deltas.between(0.2, 0.3))  # Wing points
-            assert any(deltas.between(0.45, 0.55))  # ATM points
-
-    class TestCalculateTermStructure:
-        """Tests for calculate_term_structure method."""
-
-        def test_with_basic_surface(self, basic_surface):
-            """Test with single point."""
-            term = basic_surface.calculate_term_structure()
-            assert term is not None
-            assert len(term) == 1
-
-        def test_with_skew_surface(self, surface_with_skew):
-            """Test with single expiry."""
-            term = surface_with_skew.calculate_term_structure()
-            assert term is not None
-            assert len(term) == 1
-
-        def test_with_term_structure(self, surface_with_term_structure):
-            """Test with proper term structure data."""
-            term = surface_with_term_structure.calculate_term_structure()
-            assert term is not None
-            assert len(term) == 10
-            assert term["days_to_expiry"].is_monotonic_increasing
-
-    class TestGetSurfaceMetrics:
-        """Tests for get_surface_metrics method."""
-
-        def test_with_basic_surface(self, basic_surface):
-            """Test with minimal data."""
-            metrics = basic_surface.get_surface_metrics()
-            assert metrics != {}
-            assert metrics["num_points"] == 1
-            assert metrics["avg_skew"] is None
-            assert metrics["term_structure_slope"] is None
-
-        def test_with_skew_surface(self, surface_with_skew):
-            """Test with skew data only."""
-            metrics = surface_with_skew.get_surface_metrics()
-            assert metrics["avg_skew"] is not None
-            assert metrics["term_structure_slope"] is None
-
-        def test_with_term_structure(self, surface_with_term_structure):
-            """Test with term structure only."""
-            metrics = surface_with_term_structure.get_surface_metrics()
-            assert metrics["avg_skew"] is None
-            assert metrics["term_structure_slope"] is not None
-
-        def test_with_full_surface(self, full_surface):
-            """Test with complete surface data."""
-            metrics = full_surface.get_surface_metrics()
-            assert metrics["avg_skew"] is not None
-            assert metrics["term_structure_slope"] is not None
-            assert metrics["num_points"] == 20
-
-        def test_edge_cases(self, volatility_engine):
-            """Test edge cases with empty surface."""
-            metrics = volatility_engine.get_surface_metrics()
-            assert metrics == {}
+    def test_empty_surface_data(self):
+        engine = VolatilityEngine()
+        vol_surface = engine.get_latest_volatility_surface("nonexistent_snapshot")
+        assert isinstance(vol_surface.strikes, list)
+        assert isinstance(vol_surface.implied_vols, list)
+        assert len(vol_surface.strikes) == 0
+        assert len(vol_surface.implied_vols) == 0
