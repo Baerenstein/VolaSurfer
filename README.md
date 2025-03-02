@@ -15,7 +15,7 @@ VolaSurfer is a suite of options analysis tools designed for volatility analysis
 ## Prerequisites
 
 - Python 3.11.9
-- PostgreSQL 14 (for primary data storage)
+- PostgreSQL 14
 
 ## Installation
 
@@ -52,7 +52,7 @@ uvicorn server.app:app --host 0.0.0.0 --port 8000 --reload
 
 ## Configuration
 
-Before starting the application, it is important to set the right URI for the database
+Before starting the application, it is important to set the right URI for the database.
 
 Go to `backend/infrastructure/settings.py` and adjust POSTGRES_URI to your specific database details.
 
@@ -72,14 +72,14 @@ npm run dev
 Contributions are welcome! Here's how you can help:
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feat/amazing-feature`)
+2. Create a feature branch (`git checkout -b fix/amazing-feature`)
 3. Commit your changes (`git commit -m 'Add amazing feature'`)
 4. Push to the branch (`git push origin feat/amazing-feature`)
 5. Open a Pull Request
 
 Please ensure your PR:
-- Follows the existing code style
-- Includes a unit tests (this is very important!)
+- All classes and methods have docstrings
+- Includes unit tests
 - Updates documentation as needed
 - Describes the changes made and their purpose
 
