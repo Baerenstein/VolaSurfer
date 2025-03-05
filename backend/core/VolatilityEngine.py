@@ -41,7 +41,7 @@ class VolatilityEngine:
         self.surfaces_data: Dict[datetime, VolPoints] = {}
 
         # self.latest_surface: Optional[VolSurface] = None
-
+    
     def add_market_data(
         self,
         timestamp: datetime,
@@ -263,3 +263,13 @@ class VolatilityEngine:
             metrics["term_structure_slope"] = slope
 
         return metrics
+
+    def get_latest_snapshot_id(self) -> Optional[str]:
+        """
+        Fetches the latest snapshot_id from the most recent timestamp.
+
+        :return: The latest snapshot_id or None if no data is available.
+        """
+        if not self.surfaces_data:
+            return None
+        return self.surfaces_data[list(self.surfaces_data.keys())[-1]].vol_points[0].snapshot_id

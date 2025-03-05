@@ -9,7 +9,7 @@ from data.exchanges.deribit import DeribitAPI
 from core.VolatilityEngine import VolatilityEngine
 from data.storage import StorageFactory
 from infrastructure.utils.logging import setup_logger
-from data.utils.data_schemas import OptionContract, MarketState, VolSurface
+from data.utils.data_schemas import OptionContract, MarketState 
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
@@ -199,7 +199,7 @@ class MarketDataEngine:
         print(f"Option chain length: {len(option_chain) if option_chain is not None else 'None'}")
         
         for row in option_chain.itertuples():
-            print(f"Processing option: {row.symbol}")
+            # print(f"Processing option: {row.symbol}")
             self.vol_engine.add_market_data(
                 timestamp=row.timestamp,
                 strike=row.strike,
@@ -216,9 +216,10 @@ class MarketDataEngine:
             )
 
         print(f"All options processed, generating surface...")
-        snapshot_id = datetime.now().isoformat()
-        print(f"Using snapshot_id: {snapshot_id}")
         
+        # snapshot_id = datetime.now().isoformat()
+        # print(f"Using snapshot_id: {snapshot_id}")
+        snapshot_id = self.vol_engine.get_latest_snapshot_id()
         vol_surface = self.vol_engine.get_volatility_surface(snapshot_id)
         print(f"Vol surface generated: {vol_surface is not None}")
         if vol_surface:
@@ -253,7 +254,7 @@ class MarketDataEngine:
             self.logger.critical("Max retries exceeded. Initiating shutdown...")
             self.is_running = False
         else:
-            wait_time = min(300, 2**self.state.error_count)
+            wait_time = min(120, 2**self.state.error_count)
             self.logger.info(f"Retrying in {wait_time} seconds...")
             await asyncio.sleep(wait_time)
 

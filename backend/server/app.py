@@ -112,10 +112,12 @@ async def get_latest_vol_surface(
 async def websocket_latest_vol_surface(websocket: WebSocket): # Ticker, SurfaceType
     await websocket.accept()
 
+    method = SurfaceType.NEAREST
     client_connected = True
     try:
         while True:
-            surface_data = store.get_latest_vol_surface(Ticker, SurfaceType)
+            surface_data = store.get_latest_vol_surface()
+            surface_data = interpolate_surface(surface_data, method)
             if surface_data is not None:
                 await websocket.send_json(surface_data)
             await asyncio.sleep(5)  # Adjust the frequency of updates as needed

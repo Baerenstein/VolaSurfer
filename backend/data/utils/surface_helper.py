@@ -6,7 +6,7 @@ from data.utils.data_schemas import VolSurface
 
 class SurfaceType(str, Enum):
     RAW = "raw"
-    CUBIC = "cubic"
+    LINEAR = "linear"
     NEAREST = "nearest"
     HESTON = "heston"
 
