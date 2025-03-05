@@ -25,85 +25,6 @@ class VolPoints:
         # print(f"Adding point: {point}")
         self.vol_points.append(point)
 
-    def get_interpolated_vol(
-        self, strike: float, expiry_date: datetime, method: str = "inverse_distance"
-    ) -> float:
-        """Get the interpolated volatility with multiple interpolation methods.
-
-        :param strike: The strike price for which to interpolate volatility.
-        :param expiry_date: The expiry_date date for which to interpolate volatility.
-        :param method: Interpolation method ('inverse_distance', 'linear', 'cubic')
-        :return: The interpolated implied volatility or None if not available.
-        """
-        if not self.vol_points:
-            return None
-
-        if method == "inverse_distance":
-            # Existing inverse distance method
-            distances = []
-            for point in self.vol_points:
-                strike_dist = abs(point.strike - strike)
-                time_dist = abs((point.expiry_date - expiry_date).days)
-                total_dist = np.sqrt(strike_dist**2 + time_dist**2)
-                distances.append((total_dist, point.implied_vol))
-
-            # Weight by inverse distance
-            total_weight = 0
-            weighted_vol = 0
-            for dist, vol in sorted(distances)[:4]:
-                if dist == 0:
-                    return vol
-                weight = 1 / dist
-                total_weight += weight
-                weighted_vol += weight * vol
-
-            return weighted_vol / total_weight if total_weight > 0 else None
-
-        elif method == "linear":
-            # Prepare data
-            strikes = [p.strike for p in self.vol_points]
-            maturities = [
-                (p.expiry_date - datetime.now()).days for p in self.vol_points
-            ]
-            vols = [p.implied_vol for p in self.vol_points]
-
-            # Target point
-            target_expiry_date = (expiry_date - datetime.now()).days
-
-            # Interpolate
-            result = griddata(
-                (strikes, maturities),
-                vols,
-                (strike, target_expiry_date),
-                method="linear",
-            )
-            # Convert numpy array to float if interpolation succeeded
-            return float(result) if result is not None else None
-
-        elif method == "cubic":
-            # Prepare data
-            strikes = [p.strike for p in self.vol_points]
-            maturities = [
-                (p.expiry_date - datetime.now()).days for p in self.vol_points
-            ]
-            vols = [p.implied_vol for p in self.vol_points]
-
-            # Target point
-            target_expiry_date = (expiry_date - datetime.now()).days
-
-            # Interpolate
-            result = griddata(
-                (strikes, maturities),
-                vols,
-                (strike, target_expiry_date),
-                method="cubic",
-            )
-            # Convert numpy array to float if interpolation succeeded
-            return float(result) if result is not None else None
-
-        else:
-            raise ValueError(f"Unsupported interpolation method: {method}")
-
     def __str__(self):
         """Return a string representation of the VolatilitySurface contents."""
         return f"VolatilitySurface(timestamp={self.timestamp}, vol_points={self.vol_points})"
@@ -113,11 +34,10 @@ class VolatilityEngine:
     def __init__(
         self,
         min_points: int = 10,
-        # window_size: int = 100,
-        # expiry_ranges: List[int] = [7, 14, 30, 60, 90],
-        # moneyness_ranges: Tuple[float, float] = (0.8, 1.2),
+        length: int = 100,
     ):
         self.min_points = min_points
+        self.length = length
         self.surfaces_data: Dict[datetime, VolPoints] = {}
 
         # self.latest_surface: Optional[VolSurface] = None
@@ -161,42 +81,53 @@ class VolatilityEngine:
         self.surfaces_data[timestamp].add_point(vol_point)
 
     # VolSurface TODO: add option type parameter
-    def get_latest_volatility_surface(self, snapshot_id: str) -> Optional[VolSurface]:
+    def get_volatility_surface(self, snapshot_id: str) -> Optional[VolSurface]:
         """
         Create a VolSurface object containing implied volatilities with strikes and days to expiry.
 
         :param snapshot_id: The snapshot_id to create the VolSurface from.
         :return: A VolSurface object representing the volatility surface
         """
-        print(f"{datetime.now()}: surfaces_data length: {len(self.surfaces_data)}.")
-
+        print(f"Getting volatility surface for snapshot_id: {snapshot_id}")
+        print(f"Number of surfaces in data: {len(self.surfaces_data)}")
+        
         filtered_vol_points = []
-        for (
-            vol_points
-        ) in self.surfaces_data.values():  # Iterate through VolPoints instances
-            filtered_vol_points.extend(
+        for timestamp, vol_points in self.surfaces_data.items():
+            print(f"Processing timestamp {timestamp} with {len(vol_points.vol_points)} points")
+            matching_points = [
                 point
                 for point in vol_points.vol_points
                 if point.snapshot_id == snapshot_id
-            )
-        # print(f"{datetime.now()}: Filtered vol points length: {len(filtered_vol_points)}.")
+            ]
+            print(f"Found {len(matching_points)} matching points for this timestamp")
+            filtered_vol_points.extend(matching_points)
+
+        print(f"Total filtered points: {len(filtered_vol_points)}")
+        
+        if not filtered_vol_points:
+            print("WARNING: No points found for this snapshot_id")
+            return None
 
         # Sort filtered_vol_points by days_to_expiry and then by moneyness
         filtered_vol_points.sort(
             key=lambda point: (point.days_to_expiry, point.moneyness)
         )
 
-        # Create a list of strikes and days to expiry
+        # Create lists of data points
         strikes = [point.strike for point in filtered_vol_points]
         moneyness = [point.moneyness for point in filtered_vol_points]
         maturities = [point.expiry_date for point in filtered_vol_points]
-        days_to_expiry = [(point.days_to_expiry) for point in filtered_vol_points]
+        days_to_expiry = [point.days_to_expiry for point in filtered_vol_points]
         implied_vols = [point.implied_vol for point in filtered_vol_points]
         option_types = [point.option_type for point in filtered_vol_points]
 
+        print(f"Data ranges:")
+        print(f"Strikes: {min(strikes)} to {max(strikes)}")
+        print(f"Days to expiry: {min(days_to_expiry)} to {max(days_to_expiry)}")
+        print(f"Implied vols: {min(implied_vols)} to {max(implied_vols)}")
 
         vol_surface = VolSurface(
-            timestamp=datetime.now(),  # or use surface.timestamp
+            timestamp=datetime.now(),
             method="computed", 
             strikes=strikes,
             moneyness=moneyness,
@@ -206,6 +137,7 @@ class VolatilityEngine:
             option_type=option_types,
             snapshot_id=snapshot_id,
         )
+        print("Successfully created VolSurface object")
         return vol_surface
 
     def get_current_skew(self, expiry_days: int = 30) -> pd.DataFrame:
@@ -272,6 +204,20 @@ class VolatilityEngine:
         print(f"{datetime.now()}: Term data: {term_data}.")
 
         return pd.DataFrame(term_data)
+
+    def get_implied_volatility_index(self):
+        # get relevant maturities
+        # self.length
+        # calculate time weight
+        # dte - self.length 
+        # get atm contract
+        # i) moneyness == 1, or ii) strike - last_price == 0
+        # calculate weights
+        # contract.iv contract.vega
+        # calculate index
+        # take weighetd average
+        # return float
+        return
 
     def get_surface_metrics(self) -> Dict:
         """Calculate key surface metrics.

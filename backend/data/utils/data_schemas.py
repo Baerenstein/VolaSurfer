@@ -57,32 +57,17 @@ class OptionContract:
             "snapshot_id": self.snapshot_id,
         }
 
-
+#TODO
 @dataclass
 class UnderlyingAsset:
     symbol: str
     last_price: float
     timestamp: datetime
-    open: Optional[float] = None
-    high: Optional[float] = None
-    low: Optional[float] = None
-    close: Optional[float] = None
+    open: Optional[float] = None # delete
+    high: Optional[float] = None # delete
+    low: Optional[float] = None # delete
+    close: Optional[float] = None # delete
     volume_24h: Optional[float] = None
-
-
-@dataclass
-class VolPoint:
-    strike: float
-    expiry_date: datetime
-    moneyness: float
-    forward: float
-    implied_vol: float
-    bid_vol: Optional[float]
-    ask_vol: Optional[float]
-    volume: Optional[int]
-    open_interest: Optional[int]
-    greeks: Dict[str, float]
-    vol_error: Optional[float]
 
 @dataclass
 class VolatilityPoint:
@@ -104,9 +89,9 @@ class VolatilityPoint:
 class VolSurface:
     timestamp: datetime
     method: str
-    strikes: List[float]  # List of strike prices
+    strikes: List[float]
     moneyness: List[float]
-    maturities: List[datetime]  # List of expiry_date dates
+    maturities: List[datetime]
     days_to_expiry: List[int]
     implied_vols: List[List[float]]
     option_type: List[str]

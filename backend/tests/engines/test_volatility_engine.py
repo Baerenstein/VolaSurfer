@@ -205,7 +205,7 @@ class TestVolatilityEngine:
         assert sample_timestamp in engine.surfaces_data
         assert len(engine.surfaces_data[sample_timestamp].vol_points) == 1
 
-    def test_get_latest_volatility_surface(self, sample_timestamp):
+    def test_get_volatility_surface(self, sample_timestamp):
         engine = VolatilityEngine()
         snapshot_id = "test_snapshot"
 
@@ -222,7 +222,7 @@ class TestVolatilityEngine:
                 snapshot_id=snapshot_id
             )
 
-        vol_surface = engine.get_latest_volatility_surface(snapshot_id)
+        vol_surface = engine.get_volatility_surface(snapshot_id)
         assert vol_surface is not None
         assert len(vol_surface.strikes) == 3
         assert len(vol_surface.implied_vols) == 3
@@ -230,7 +230,7 @@ class TestVolatilityEngine:
 
     def test_empty_surface_data(self):
         engine = VolatilityEngine()
-        vol_surface = engine.get_latest_volatility_surface("nonexistent_snapshot")
+        vol_surface = engine.get_volatility_surface("nonexistent_snapshot")
         assert isinstance(vol_surface.strikes, list)
         assert isinstance(vol_surface.implied_vols, list)
         assert len(vol_surface.strikes) == 0

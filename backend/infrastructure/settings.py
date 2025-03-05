@@ -13,7 +13,7 @@ class StorageConfig(BaseSettings):
 
     STORAGE_TYPE: StorageType = StorageType.POSTGRES
     ARCTIC_URI: str = "lmdb://tmp/trading_data"
-    POSTGRES_URI: str = "postgresql://mikeb:postgres@localhost:5432/optionsdb"  # Update with your credentials
+    POSTGRES_URI: str = "postgresql://postgres:postgres@localhost:5432/optionsdb"  # Update with your credentials
 
 
 class Settings(BaseSettings):
