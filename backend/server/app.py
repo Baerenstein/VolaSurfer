@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from infrastructure.settings import Settings
 from data.storage import StorageFactory
 from data.utils.data_schemas import OptionContract
-from data.utils.surface_helper import interpolate_surface, InterpolationMethod
+from data.utils.surface_helper import interpolate_surface, SurfaceType
 import asyncio
 
 
@@ -79,8 +79,8 @@ async def get_options_chain(symbol: str) -> List[dict]:
 
 @app.get("/api/v1/latest-vol-surface")
 async def get_latest_vol_surface(
-    method: InterpolationMethod = Query(
-        InterpolationMethod.NEAREST,
+    method: SurfaceType = Query(
+        SurfaceType.NEAREST,
         description="Interpolation method to use: raw, cubic, or nearest"
     )
 ):
@@ -108,20 +108,21 @@ async def get_latest_vol_surface(
             detail=f"Error interpolating surface: {str(e)}"
         )
 
+
+
 @app.websocket("/api/v1/ws/latest-vol-surface")
 async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
 
-    # # get the "method" query parameter, defaults to "nearest"
     params = websocket.query_params
-    method = params.get("method", "nearest")
+    method = params.get("method")  # Removed default value to make it truly dependent on the query
 
-    if method.upper() not in InterpolationMethod.__members__:
+    if method.upper() not in SurfaceType.__members__:
         await websocket.send_json({"error": "Invalid interpolation method"})
         await websocket.close()
         return
 
-    method = InterpolationMethod.__members__[method.upper()]
+    method = SurfaceType.__members__[method.upper()]
 
     client_connected = True
     try:

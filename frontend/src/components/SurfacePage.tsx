@@ -41,7 +41,8 @@ const MemoizedPlot = memo(({ data, layout }: { data: any; layout: any }) => {
 });
 
 const SurfacePage: React.FC = () => {
-  const surfaceData = useSurfaceData();
+  const [interpolationMethod, setInterpolationMethod] = useState<'linear' | 'nearest'>('nearest');
+  const surfaceData = useSurfaceData(interpolationMethod);
   const [shouldRender, setShouldRender] = useState(false);
 
   // 🔥 useRef instead of useState to avoid re-renders
@@ -98,6 +99,31 @@ const SurfacePage: React.FC = () => {
     }
   }, [surfaceData.data]);
 
+  // Update the plot data (remove the smoothing property since we're using server-side interpolation)
+  const plotData = [{
+    type: 'surface',
+    x: surfaceData.data?.moneyness || [],
+    y: surfaceData.data?.daysToExpiry || [],
+    z: surfaceData.data?.impliedVols?.map(row => row.map(vol => vol / 100)) || [],
+    showscale: true,
+    colorscale: "Viridis",
+    contours: {
+      z: {
+        show: true,
+        usecolormap: true,
+        highlightcolor: "#42f462",
+        project: { z: true },
+      },
+    },
+    opacity: 1,
+    hoverongaps: false,
+    hoverlabel: {
+      bgcolor: "#FFF",
+      font: { color: "#000" },
+    },
+    hoverinfo: 'x+y+z',
+  }];
+
   return (
     <div className="flex flex-col w-full min-h-screen bg-gray-100">
       <div className="flex flex-1 p-4">
@@ -112,34 +138,27 @@ const SurfacePage: React.FC = () => {
             onMouseUp={handleMouseUp} // 🔥 Detect mouse release
           >
             <div className="px-6 py-4 border-b border-gray-200">
-              <h3 className="text-lg font-semibold text-gray-800">Surface</h3>
+              <div className="flex justify-between items-center">
+                <h3 className="text-lg font-semibold text-gray-800">Surface</h3>
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="interpolation" className="text-sm text-gray-600">
+                    Interpolation:
+                  </label>
+                  <select
+                    id="interpolation"
+                    value={interpolationMethod}
+                    onChange={(e) => setInterpolationMethod(e.target.value as 'linear' | 'nearest')}
+                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="nearest">Nearest</option>
+                    <option value="linear">Linear</option>
+                  </select>
+                </div>
+              </div>
             </div>
             <div className="p-4">
               <MemoizedPlot 
-                data={[
-                  {
-                    type: 'surface',
-                    x: surfaceData.data?.moneyness || [],
-                    y: surfaceData.data?.daysToExpiry || [],
-                    z: surfaceData.data?.impliedVols?.map(row => row.map(vol => vol / 100)) || [],
-                    showscale: true,
-                    colorscale: "Viridis",
-                    contours: {
-                      z: {
-                        show: true,
-                        usecolormap: true,
-                        highlightcolor: "#42f462",
-                        project: { z: true },
-                      },
-                    },
-                    opacity: 1,
-                    hoverongaps: false,
-                    hoverlabel: {
-                      bgcolor: "#FFF",
-                      font: { color: "#000" },
-                    },
-                  },
-                ]}
+                data={plotData}
                 layout={layout}
                 shouldRender={shouldRender}
               />
