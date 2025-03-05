@@ -108,18 +108,30 @@ async def get_latest_vol_surface(
             detail=f"Error interpolating surface: {str(e)}"
         )
 
-@app.websocket("/api/v1/ws/latest-vol-surface/") # {Ticker}/{SurfaceType}
-async def websocket_latest_vol_surface(websocket: WebSocket): # Ticker, SurfaceType
+
+
+@app.websocket("/api/v1/ws/latest-vol-surface")
+async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
 
-    method = SurfaceType.NEAREST
+    params = websocket.query_params
+    method = params.get("method")  # Removed default value to make it truly dependent on the query
+
+    if method.upper() not in SurfaceType.__members__:
+        await websocket.send_json({"error": "Invalid interpolation method"})
+        await websocket.close()
+        return
+
+    method = SurfaceType.__members__[method.upper()]
+
     client_connected = True
     try:
         while True:
+            # Here you would typically fetch the latest surface data
             surface_data = store.get_latest_vol_surface()
-            surface_data = interpolate_surface(surface_data, method)
+            interpolated_data = interpolate_surface(surface_data, method)
             if surface_data is not None:
-                await websocket.send_json(surface_data)
+                await websocket.send_json(interpolated_data)
             await asyncio.sleep(5)  # Adjust the frequency of updates as needed
     except WebSocketDisconnect:
         print("Client disconnected")
@@ -129,28 +141,6 @@ async def websocket_latest_vol_surface(websocket: WebSocket): # Ticker, SurfaceT
     finally:
         if client_connected:
             await websocket.close()
-
-
-# @app.websocket("/api/v1/ws/vol-spread/{Ticker}/{Length}")
-# async def websocket_get__vol_spread(websocket: WebSocket, Ticker, Length):
-#     await websocket.accept()
-
-#     client_connected = True
-#     try:
-#         while True:
-#             vol_spread = store.get_vol_spread(Ticker, Length)
-#             if vol_spread is not None:
-#                 await websocket.send_json(vol_spread)
-#             await asyncio.sleep(5)  # Adjust the frequency of updates as needed
-#     except WebSocketDisconnect:
-#         print("Client disconnected")
-#         client_connected = False
-#     except Exception as e:
-#         print(f"Error in WebSocket connection: {str(e)}")
-#     finally:
-#         if client_connected:
-#             await websocket.close()
-
 
 @app.get("/health")
 async def health_check():
