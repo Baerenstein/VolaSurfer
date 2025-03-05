@@ -41,9 +41,9 @@ const MemoizedPlot = memo(({ data, layout }: { data: any; layout: any }) => {
 });
 
 const SurfacePage: React.FC = () => {
-  const surfaceData = useSurfaceData();
+  const [interpolationMethod, setInterpolationMethod] = useState<'linear' | 'nearest'>('nearest');
+  const surfaceData = useSurfaceData(interpolationMethod);
   const [shouldRender, setShouldRender] = useState(false);
-  const [interpolationMethod, setInterpolationMethod] = useState('spline');
 
   // 🔥 useRef instead of useState to avoid re-renders
   const scrollingRef = useRef(false);
@@ -99,7 +99,7 @@ const SurfacePage: React.FC = () => {
     }
   }, [surfaceData.data]);
 
-  // Update the plot data to include interpolation
+  // Update the plot data (remove the smoothing property since we're using server-side interpolation)
   const plotData = [{
     type: 'surface',
     x: surfaceData.data?.moneyness || [],
@@ -121,9 +121,7 @@ const SurfacePage: React.FC = () => {
       bgcolor: "#FFF",
       font: { color: "#000" },
     },
-    // Add interpolation options
     hoverinfo: 'x+y+z',
-    smoothing: interpolationMethod === 'spline' ? 1 : 0,
   }];
 
   return (
@@ -149,10 +147,10 @@ const SurfacePage: React.FC = () => {
                   <select
                     id="interpolation"
                     value={interpolationMethod}
-                    onChange={(e) => setInterpolationMethod(e.target.value)}
+                    onChange={(e) => setInterpolationMethod(e.target.value as 'linear' | 'nearest')}
                     className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
-                    <option value="spline">Spline</option>
+                    <option value="nearest">Nearest</option>
                     <option value="linear">Linear</option>
                   </select>
                 </div>

@@ -13,7 +13,7 @@ const API_CONFIG = {
   },
 };
 
-export function useSurfaceData() {
+export function useSurfaceData(interpolationMethod: 'linear' | 'nearest' = 'nearest') {
   const [state, setState] = useState({
     isLoading: true,
     error: null,
@@ -21,7 +21,7 @@ export function useSurfaceData() {
   });
 
   useEffect(() => {
-    const wsUrl = `${API_CONFIG.wsBaseUrl}${API_CONFIG.endpoints.volSurfaceWs}?method=nearest`;
+    const wsUrl = `${API_CONFIG.wsBaseUrl}${API_CONFIG.endpoints.volSurfaceWs}?method=${interpolationMethod}`;
     console.log('Connecting to WebSocket:', wsUrl);
 
     const socket = new WebSocket(wsUrl);
@@ -79,7 +79,7 @@ export function useSurfaceData() {
       console.log('Closing WebSocket connection');
       socket.close();
     };
-  }, []);
+  }, [interpolationMethod]);
 
   return state;
 }
