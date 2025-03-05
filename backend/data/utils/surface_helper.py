@@ -65,6 +65,7 @@ def interpolate_surface(data: dict, method: SurfaceType) -> dict:
         "interpolation_method": method.value
     }
 
+#TODO still a prototype
 def filter_surface(
     surface: VolSurface,
     option_type: Optional[str] = None,

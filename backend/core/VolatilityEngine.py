@@ -124,7 +124,7 @@ class VolatilityEngine:
         implied_vols = [point.implied_vol for point in filtered_vol_points]
         option_types = [point.option_type for point in filtered_vol_points]
 
-        print(f"Data ranges:")
+        print("Data ranges:")
         print(f"Strikes: {min(strikes)} to {max(strikes)}")
         print(f"Days to expiry: {min(days_to_expiry)} to {max(days_to_expiry)}")
         print(f"Implied vols: {min(implied_vols)} to {max(implied_vols)}")
