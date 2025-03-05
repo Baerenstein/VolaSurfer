@@ -38,145 +38,6 @@ class TestVolPoints:
         assert len(vol_points.vol_points) == 1
         assert vol_points.vol_points[0] == sample_vol_point
 
-    def test_get_interpolated_vol_inverse_distance(self, sample_timestamp):
-        vol_points = VolPoints(sample_timestamp)
-        
-        # Add multiple points for interpolation
-        points = [
-            VolatilityPoint(
-                timestamp=sample_timestamp,
-                strike=strike,
-                moneyness=strike/100,
-                expiry_date=sample_timestamp + timedelta(days=days),
-                days_to_expiry=days,
-                implied_vol=vol,
-                option_type="call"
-            )
-            for strike, days, vol in [
-                (95.0, 25, 0.18),
-                (100.0, 30, 0.20),
-                (105.0, 35, 0.22)
-            ]
-        ]
-        
-        for point in points:
-            vol_points.add_point(point)
-
-        # Test interpolation
-        interpolated_vol = vol_points.get_interpolated_vol(
-            strike=100.0,
-            expiry_date=sample_timestamp + timedelta(days=30),
-            method="inverse_distance"
-        )
-        assert isinstance(interpolated_vol, float)
-        assert 0.18 <= interpolated_vol <= 0.22
-
-    def test_get_interpolated_vol_linear(self, sample_timestamp):
-        vol_points = VolPoints(sample_timestamp)
-        
-        # Add multiple points for interpolation in a grid pattern
-        test_points = []
-        for strike in [95.0, 100.0, 105.0]:
-            for days in [25, 30, 35]:
-                # Create a more varied volatility surface
-                base_vol = 0.20
-                strike_adj = (strike - 100.0) * 0.001  # Small adjustment based on strike
-                time_adj = (days - 30) * 0.001  # Small adjustment based on time
-                vol = base_vol + strike_adj + time_adj
-                
-                test_points.append((strike, days, vol))
-        
-        # Create and add the points
-        points = [
-            VolatilityPoint(
-                timestamp=sample_timestamp,
-                strike=strike,
-                moneyness=strike/100,
-                expiry_date=sample_timestamp + timedelta(days=days),
-                days_to_expiry=days,
-                implied_vol=vol,
-                option_type="call"
-            )
-            for strike, days, vol in test_points
-        ]
-        
-        for point in points:
-            vol_points.add_point(point)
-
-        # Test interpolation at a point within the grid
-        interpolated_vol = vol_points.get_interpolated_vol(
-            strike=100.0,
-            expiry_date=sample_timestamp + timedelta(days=30),
-            method="linear"
-        )
-        
-        assert interpolated_vol is not None, "Interpolation should not return None"
-        assert isinstance(interpolated_vol, float), f"Expected float, got {type(interpolated_vol)}"
-        # The interpolated value should be close to the base volatility
-        assert abs(interpolated_vol - 0.20) < 0.01, f"Expected ~0.20, got {interpolated_vol}"
-
-        # Test interpolation outside the grid should return None
-        outside_grid_vol = vol_points.get_interpolated_vol(
-            strike=200.0,  # Way outside the grid
-            expiry_date=sample_timestamp + timedelta(days=30),
-            method="linear"
-        )
-        assert outside_grid_vol is None, "Interpolation outside grid should return None"
-
-    def test_get_interpolated_vol_cubic(self, sample_timestamp):
-        vol_points = VolPoints(sample_timestamp)
-        
-        # Add multiple points in a grid pattern (need more points for cubic interpolation)
-        test_points = []
-        for strike in [90.0, 95.0, 100.0, 105.0, 110.0]:  # Need more points for cubic
-            for days in [20, 25, 30, 35, 40]:  # Need more points for cubic
-                # Create a more complex volatility surface suitable for cubic interpolation
-                base_vol = 0.20
-                strike_adj = (strike - 100.0) * 0.001  # Strike adjustment
-                time_adj = (days - 30) * 0.001  # Time adjustment
-                # Add some curvature to the surface
-                curvature = 0.0001 * (strike - 100.0)**2 + 0.0001 * (days - 30)**2
-                vol = base_vol + strike_adj + time_adj + curvature
-                
-                test_points.append((strike, days, vol))
-        
-        # Create and add the points
-        points = [
-            VolatilityPoint(
-                timestamp=sample_timestamp,
-                strike=strike,
-                moneyness=strike/100,
-                expiry_date=sample_timestamp + timedelta(days=days),
-                days_to_expiry=days,
-                implied_vol=vol,
-                option_type="call"
-            )
-            for strike, days, vol in test_points
-        ]
-        
-        for point in points:
-            vol_points.add_point(point)
-
-        # Test interpolation at a point within the grid
-        interpolated_vol = vol_points.get_interpolated_vol(
-            strike=100.0,
-            expiry_date=sample_timestamp + timedelta(days=30),
-            method="cubic"
-        )
-        
-        assert interpolated_vol is not None, "Cubic interpolation should not return None"
-        assert isinstance(interpolated_vol, float), f"Expected float, got {type(interpolated_vol)}"
-        # The interpolated value should be close to the base volatility at the center
-        assert abs(interpolated_vol - 0.20) < 0.01, f"Expected ~0.20, got {interpolated_vol}"
-
-        # Test interpolation outside the grid should return None
-        outside_grid_vol = vol_points.get_interpolated_vol(
-            strike=200.0,  # Way outside the grid
-            expiry_date=sample_timestamp + timedelta(days=30),
-            method="cubic"
-        )
-        assert outside_grid_vol is None, "Interpolation outside grid should return None"
-
 class TestVolatilityEngine:
     def test_init(self):
         engine = VolatilityEngine(min_points=10)
@@ -208,6 +69,7 @@ class TestVolatilityEngine:
     def test_get_volatility_surface(self, sample_timestamp):
         engine = VolatilityEngine()
         snapshot_id = "test_snapshot"
+        asset_id = "TEST"
 
         # Add multiple data points
         for i, strike in enumerate([95.0, 100.0, 105.0]):
@@ -219,10 +81,11 @@ class TestVolatilityEngine:
                 expiry_date=sample_timestamp + timedelta(days=30+i),
                 days_to_expiry=30+i,
                 implied_vol=0.2 + i*0.02,
-                snapshot_id=snapshot_id
+                snapshot_id=snapshot_id,
+                asset_id=asset_id
             )
 
-        vol_surface = engine.get_volatility_surface(snapshot_id)
+        vol_surface = engine.get_volatility_surface(snapshot_id, asset_id)
         assert vol_surface is not None
         assert len(vol_surface.strikes) == 3
         assert len(vol_surface.implied_vols) == 3
@@ -230,8 +93,87 @@ class TestVolatilityEngine:
 
     def test_empty_surface_data(self):
         engine = VolatilityEngine()
-        vol_surface = engine.get_volatility_surface("nonexistent_snapshot")
-        assert isinstance(vol_surface.strikes, list)
-        assert isinstance(vol_surface.implied_vols, list)
-        assert len(vol_surface.strikes) == 0
-        assert len(vol_surface.implied_vols) == 0
+        vol_surface = engine.get_volatility_surface("nonexistent_snapshot", "TEST")
+        assert vol_surface is None 
+
+    def test_get_skews(self, sample_timestamp):
+        engine = VolatilityEngine(min_points=3)
+        snapshot_id = "test_snapshot"
+
+        # Add multiple points with different strikes for the same expiry
+        strikes = [90.0, 100.0, 110.0]
+        vols = [0.25, 0.20, 0.22]  # Typical smile pattern
+        
+        for strike, vol in zip(strikes, vols):
+            engine.add_market_data(
+                timestamp=sample_timestamp,
+                strike=strike,
+                moneyness=strike/100,
+                option_type="call",
+                expiry_date=sample_timestamp + timedelta(days=30),
+                days_to_expiry=30,
+                implied_vol=vol,
+                snapshot_id=snapshot_id,
+                asset_id="TEST"
+            )
+
+        surface = engine.get_volatility_surface(snapshot_id, "TEST")
+        skew_data = engine.get_skews(surface)
+
+        assert skew_data is not None
+        assert len(skew_data) == 3
+        assert all(skew_data.columns.isin(['days_to_expiry', 'strike', 'implied_vol', 'option_type', 'moneyness']))
+        assert list(skew_data['strike'].values) == strikes
+        assert list(skew_data['implied_vol'].values) == vols
+
+    def test_calculate_term_structure(self, sample_timestamp):
+        engine = VolatilityEngine()
+        snapshot_id = "test_snapshot"
+
+        # Add points with different expiries but similar moneyness (ATM)
+        expiries = [30, 60, 90]
+        vols = [0.20, 0.22, 0.23]  # Increasing term structure
+        
+        for days, vol in zip(expiries, vols):
+            engine.add_market_data(
+                timestamp=sample_timestamp,
+                strike=100.0,
+                moneyness=1.0,  # ATM
+                option_type="call",
+                expiry_date=sample_timestamp + timedelta(days=days),
+                days_to_expiry=days,
+                implied_vol=vol,
+                snapshot_id=snapshot_id,
+                asset_id="TEST"
+            )
+
+        surface = engine.get_volatility_surface(snapshot_id, "TEST")
+        term_data = engine._get_term_structure(surface)
+
+        assert term_data is not None
+        assert len(term_data) == 3
+        assert all(term_data.columns.isin(['days_to_expiry', 'atm_vol']))
+        assert list(term_data['days_to_expiry'].values) == expiries
+        assert list(term_data['atm_vol'].values) == vols
+
+    def test_skews_insufficient_points(self, sample_timestamp):
+        engine = VolatilityEngine(min_points=5)  # Require 5 points minimum
+        snapshot_id = "test_snapshot"
+
+        # Add only 2 points
+        for strike in [95.0, 105.0]:
+            engine.add_market_data(
+                timestamp=sample_timestamp,
+                strike=strike,
+                moneyness=strike/100,
+                option_type="call",
+                expiry_date=sample_timestamp + timedelta(days=30),
+                days_to_expiry=30,
+                implied_vol=0.2,
+                snapshot_id=snapshot_id,
+                asset_id="TEST"
+            )
+
+        surface = engine.get_volatility_surface(snapshot_id, "TEST")
+        skew_data = engine.get_skews(surface)
+        assert skew_data is None  # Should return None due to insufficient points

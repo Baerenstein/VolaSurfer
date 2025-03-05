@@ -51,7 +51,6 @@ class MarketDataEngine:
         current_time = datetime.now()
         self.asset_id = self.store.get_or_create_asset(self.asset_type, self.currency)
 
-
         # add time check for when was the last time
         if self.instruments_initialized:
             self.logger.info("Instruments have already been initialized.")
@@ -213,6 +212,7 @@ class MarketDataEngine:
                 vega=row.vega,
                 theta=row.theta,
                 snapshot_id=row.snapshot_id,
+                asset_id=self.asset_id,
             )
 
         print(f"All options processed, generating surface...")
@@ -220,11 +220,25 @@ class MarketDataEngine:
         # snapshot_id = datetime.now().isoformat()
         # print(f"Using snapshot_id: {snapshot_id}")
         snapshot_id = self.vol_engine.get_latest_snapshot_id()
-        vol_surface = self.vol_engine.get_volatility_surface(snapshot_id)
+        vol_surface = self.vol_engine.get_volatility_surface(snapshot_id, self.asset_id)
         print(f"Vol surface generated: {vol_surface is not None}")
         if vol_surface:
             print(f"Surface contains {len(vol_surface.strikes)} points")
-        
+
+        skews = self.vol_engine.get_skews(vol_surface)
+        print(f"Skew generated: {skews is not None}")
+        print(f"Skew contains {skews}")
+
+        term_structure = self.vol_engine._get_term_structure(vol_surface)
+        print(f"Term structure contains {term_structure}")
+
+        # # get implied volatility index
+        implied_volatility_index = self.vol_engine.get_implied_volatility_index(vol_surface)
+        print(f"Implied volatility index generated: {implied_volatility_index}")
+
+        surface_metrics = self.vol_engine.get_surface_metrics(vol_surface)
+        print(f"Surface metrics generated: {surface_metrics}")
+
         return vol_surface
 
     def _store_data(self, last_price, options_chain, vol_surface):
@@ -318,7 +332,7 @@ async def main():
         currency=currency,
     )
 
-    await worker.run(interval_minutes=5)
+    await worker.run(interval_minutes=2)
 
 
 if __name__ == "__main__":

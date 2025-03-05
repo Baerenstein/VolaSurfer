@@ -83,7 +83,7 @@ class VolatilityPoint:
     vega: Optional[float] = (None,)
     theta: Optional[float] = (None,)
     snapshot_id: Optional[str] = None
-
+    asset_id: Optional[str] = None
 
 @dataclass
 class VolSurface:

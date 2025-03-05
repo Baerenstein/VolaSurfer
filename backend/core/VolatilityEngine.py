@@ -56,6 +56,7 @@ class VolatilityEngine:
         vega: Optional[float] = None,
         theta: Optional[float] = None,
         snapshot_id: Optional[str] = None,
+        asset_id: Optional[str] = None,
     ):
         # Check if the timestamp already exists
         if timestamp not in self.surfaces_data:
@@ -75,17 +76,19 @@ class VolatilityEngine:
             vega=vega,
             theta=theta,
             snapshot_id=snapshot_id,
+            asset_id=asset_id,
         )
 
         # Add the point to the corresponding VolPoints instance
         self.surfaces_data[timestamp].add_point(vol_point)
 
     # VolSurface TODO: add option type parameter
-    def get_volatility_surface(self, snapshot_id: str) -> Optional[VolSurface]:
+    def get_volatility_surface(self, snapshot_id: str, asset_id: str) -> Optional[VolSurface]:
         """
         Create a VolSurface object containing implied volatilities with strikes and days to expiry.
 
         :param snapshot_id: The snapshot_id to create the VolSurface from.
+        :param asset_id: The asset_id to create the VolSurface from.
         :return: A VolSurface object representing the volatility surface
         """
         print(f"Getting volatility surface for snapshot_id: {snapshot_id}")
@@ -126,6 +129,9 @@ class VolatilityEngine:
         print(f"Days to expiry: {min(days_to_expiry)} to {max(days_to_expiry)}")
         print(f"Implied vols: {min(implied_vols)} to {max(implied_vols)}")
 
+        # Add after filtering points
+        asset_id = filtered_vol_points[0].asset_id if filtered_vol_points else None
+
         vol_surface = VolSurface(
             timestamp=datetime.now(),
             method="computed", 
@@ -136,64 +142,75 @@ class VolatilityEngine:
             implied_vols=implied_vols,
             option_type=option_types,
             snapshot_id=snapshot_id,
+            asset_id=asset_id,
         )
         print("Successfully created VolSurface object")
         return vol_surface
 
-    def get_current_skew(self, expiry_days: int = 30) -> pd.DataFrame:
-        """Get the current volatility skew for a specific expiry.
+    def get_skews(self, surface: VolSurface) -> pd.DataFrame:
+        """Get the volatility skews for each expiry.
 
-        :param expiry_days: The number of days to expiry for the skew calculation.
-        :return: A DataFrame containing the skew data or None if insufficient data.
+        :param surface: VolSurface object containing the volatility surface data
+        :return: A DataFrame containing the skew data or None if insufficient data
         """
-        print(f"Calculating current skew for expiry_days={expiry_days}.")
-        if not self.latest_surface:
+        print("Calculating skews for all expiries.")
+        if not surface:
+            print("Surface is None, returning None.")
             return None
 
-        target_date = datetime.now() + timedelta(days=expiry_days)
+        # Debug: Print available days to expiry
+        unique_expiries = sorted(set(surface.days_to_expiry))
+        print(f"Available days to expiry in surface: {unique_expiries}")
 
-        # Filter points near target expiry
-        relevant_points = [
-            p
-            for p in self.latest_surface.vol_points
-            if abs((p.expiry_date - target_date).days) <= 5  # 5-day tolerance
-        ]
+        # Group data by expiry
+        all_data = []
+        for expiry in unique_expiries:
+            # Get indices for this expiry
+            indices = [i for i, dte in enumerate(surface.days_to_expiry) if dte == expiry]
+            
+            if len(indices) < self.min_points:
+                print(f"Skipping expiry {expiry} - insufficient points: {len(indices)} < {self.min_points}")
+                continue
 
-        if len(relevant_points) < self.min_points:
+            # Create DataFrame for this expiry
+            expiry_data = pd.DataFrame({
+                "days_to_expiry": expiry,
+                "strike": [surface.strikes[i] for i in indices],
+                "implied_vol": [surface.implied_vols[i] for i in indices],
+                "option_type": [surface.option_type[i] for i in indices],
+                "moneyness": [surface.moneyness[i] for i in indices]
+            })
+            
+            all_data.append(expiry_data)
+
+        if not all_data:
+            print("No valid skews found for any expiry.")
             return None
 
-        # maybe add timestamp for indexing?
-        skew_data = pd.DataFrame(
-            [
-                {
-                    "strike": p.strike,
-                    "implied_vol": p.implied_vol,
-                    "option_type": p.option_type,
-                    "delta": p.delta,
-                    "gamma": p.gamma,
-                    "vega": p.vega,
-                }
-                for p in relevant_points
-            ]
-        )
-        print(f"{datetime.now()}: Skew data: {skew_data}.")
-        return skew_data.sort_values("strike")
+        # Combine all expiry data
+        skew_data = pd.concat(all_data, ignore_index=True)
+        print(f"{datetime.now()}: Combined skew data shape: {skew_data.shape}")
+        
+        return skew_data.sort_values(["days_to_expiry", "strike"])
 
-    def calculate_term_structure(self) -> pd.DataFrame:
+    def _get_term_structure(self, surface: VolSurface) -> pd.DataFrame:
         """Calculate ATM volatility term structure.
 
+        :param surface: VolSurface object containing the volatility surface data
         :return: A DataFrame containing the term structure data or None if insufficient data.
         """
         print("Calculating term structure.")
-        if not self.latest_surface:
+        if not surface:
             return None
 
-        # Group by expiry and get ATM vols
+        # Group by expiry and get ATM vols (using moneyness close to 1.0)
         term_structure = defaultdict(list)
-
-        for point in self.latest_surface.vol_points:
-            days_to_expiry = (point.expiry_date - datetime.now()).days
-            term_structure[days_to_expiry].append(point.implied_vol)
+        
+        # Zip all relevant data together for processing
+        for dte, mon, vol in zip(surface.days_to_expiry, surface.moneyness, surface.implied_vols):
+            # Consider a point ATM if moneyness is between 0.95 and 1.05
+            if 0.95 <= mon <= 1.05:
+                term_structure[dte].append(vol)
 
         # Average vols for each expiry
         term_data = {"days_to_expiry": [], "atm_vol": []}
@@ -201,63 +218,104 @@ class VolatilityEngine:
         for dte, vols in sorted(term_structure.items()):
             term_data["days_to_expiry"].append(dte)
             term_data["atm_vol"].append(np.mean(vols))
+            
         print(f"{datetime.now()}: Term data: {term_data}.")
 
         return pd.DataFrame(term_data)
 
-    def get_implied_volatility_index(self):
-        # get relevant maturities
-        # self.length
-        # calculate time weight
-        # dte - self.length 
-        # get atm contract
-        # i) moneyness == 1, or ii) strike - last_price == 0
-        # calculate weights
-        # contract.iv contract.vega
-        # calculate index
-        # take weighetd average
-        # return float
-        return
+    def get_implied_volatility_index(self, surface: VolSurface, target_expiry_days: int = 30) -> float:
+        """Get the implied volatility index for the surface.
 
-    def get_surface_metrics(self) -> Dict:
+        Args:
+            surface: VolSurface object containing the volatility surface data
+            target_expiry_days: Target number of days to expiry (default: 30)
+
+        Returns:
+            float: The implied volatility index, or None if surface is invalid
+        """
+        print("Calculating implied volatility index.")
+        if not surface: 
+            print("Surface is None, returning None.")
+            return None
+
+        # Create sorted data structure
+        data = list(zip(
+            surface.days_to_expiry,
+            surface.moneyness,
+            surface.implied_vols,
+            surface.vegas if hasattr(surface, 'vegas') else [1.0] * len(surface.implied_vols)
+        ))
+        data.sort(key=lambda x: (x[0], x[1]))  # Sort by days_to_expiry, then moneyness
+        
+        # Unzip sorted data
+        days_to_expiry, moneyness, implied_vols, vegas = zip(*data)
+        
+        # Find contracts near target expiry
+        target_expiry_indices = [
+            i for i, days in enumerate(days_to_expiry)
+            if abs(days - target_expiry_days) < 5
+        ]
+
+        # Find ATM contracts (moneyness close to 1.0)
+        atm_indices = [
+            i for i, m in enumerate(moneyness)
+            if abs(m - 1.0) < 0.01
+        ]
+
+        if not target_expiry_indices or not atm_indices:
+            print("Insufficient data for index calculation.")
+            return None
+
+        # Calculate vega-weighted averages
+        atm_volatility = np.average(
+            [implied_vols[i] for i in atm_indices],
+            weights=[vegas[i] for i in atm_indices]
+        )
+
+        target_expiry_volatility = np.average(
+            [implied_vols[i] for i in target_expiry_indices],
+            weights=[vegas[i] for i in target_expiry_indices]
+        )
+
+        # Calculate volatility index
+        volatility_index = atm_volatility - target_expiry_volatility
+
+        return volatility_index
+
+    def get_surface_metrics(self, surface: VolSurface) -> Dict:
         """Calculate key surface metrics.
 
-        :return: A dictionary containing various metrics of the volatility surface.
+        Args:
+            surface: VolSurface object containing the volatility surface data
+
+        Returns:
+            Dict: A dictionary containing various metrics of the volatility surface
         """
         print("Calculating surface metrics.")
-        if not self.latest_surface:
+        if not surface:
             return {}
-        print(f"{datetime.now()}: Latest surface: {self.latest_surface}.")
-        print(f"{datetime.now()}: Vol points: {self.latest_surface.vol_points}.")
-        print(
-            f"{datetime.now()}: Vol points length: {len(self.latest_surface.vol_points)}."
-        )
-        print(
-            f"{datetime.now()}: Vol points implied vols: {[p.implied_vol for p in self.latest_surface.vol_points]}."
-        )
+
         metrics = {
-            "timestamp": self.latest_surface.timestamp,
-            "num_points": len(self.latest_surface.vol_points),
-            "avg_vol": np.mean([p.implied_vol for p in self.latest_surface.vol_points]),
-            "min_vol": min(p.implied_vol for p in self.latest_surface.vol_points),
-            "max_vol": max(p.implied_vol for p in self.latest_surface.vol_points),
-            "avg_skew": None,  # Calculated below
-            "term_structure_slope": None,  # Calculated below
+            "timestamp": surface.timestamp,
+            "num_points": len(surface.strikes),
+            "avg_vol": np.mean(surface.implied_vols),
+            "min_vol": min(surface.implied_vols),
+            "max_vol": max(surface.implied_vols),
+            "avg_skew": None,
+            "term_structure_slope": None,
         }
 
-        # Calculate average skew (ATM to 25D)
-        skew_data = self.get_current_skew()
+        # Calculate average skew (using moneyness instead of delta)
+        skew_data = self.get_skews(surface)
         if skew_data is not None:
-            atm_vol = skew_data[skew_data["delta"].abs().between(0.45, 0.55)][
-                "implied_vol"
-            ].mean()
-            wing_vol = skew_data[skew_data["delta"].abs().between(0.2, 0.3)][
-                "implied_vol"
-            ].mean()
-            metrics["avg_skew"] = wing_vol - atm_vol
+            # Use moneyness instead of delta for ATM and wing calculations
+            atm_vol = skew_data[skew_data["moneyness"].between(0.95, 1.05)]["implied_vol"].mean()
+            wing_vol = skew_data[skew_data["moneyness"].between(0.75, 0.85)]["implied_vol"].mean()
+            if not (np.isnan(atm_vol) or np.isnan(wing_vol)):
+                metrics["avg_skew"] = wing_vol - atm_vol
 
         # Calculate term structure slope
-        term_data = self.calculate_term_structure()
+        term_data = self._get_term_structure(surface)
         if term_data is not None and len(term_data) > 1:
             slope, _ = np.polyfit(term_data["days_to_expiry"], term_data["atm_vol"], 1)
             metrics["term_structure_slope"] = slope
