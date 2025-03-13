@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
 import Plot from 'react-plotly.js';
-import { useSurfaceData } from '../hooks/useSurfaceData';
-import VolaHeatContent from './VolHeatContent';
+import { useSurfaceData } from '../../hooks/useSurfaceData';
+import VolaHeatContent from '../VolHeatContent';
 
 interface ContainerProps {
   title: string;

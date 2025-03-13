@@ -78,7 +78,7 @@ const VolaHeatContent: React.FC<ReturnType<typeof useSurfaceData>> = ({
                 y: data.daysToExpiry,
                 z: data.impliedVols,
                 showscale: true,
-                colorscale: 'Viridis',
+                colorscale: 'Viridis', // change colorscale to something else, including read, maybe have universal color scalex
                 colorbar: {
                   title: 'IV',
                 },

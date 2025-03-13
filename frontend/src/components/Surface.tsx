@@ -37,7 +37,7 @@ const Surface: React.FC<SurfaceProps> = ({ moneyness, daysToExpiry, impliedVols 
                 y: daysToExpiry,
                 z: impliedVols,
                 showscale: false,
-                colorscale: 'Viridis',
+                colorscale: 'Viridis', // change colorscale to something else, including read
                 contours: {
                   z: {
                     show: true,
@@ -59,7 +59,7 @@ const Surface: React.FC<SurfaceProps> = ({ moneyness, daysToExpiry, impliedVols 
               scene: {
                 xaxis: { 
                   title: 'Moneyness',
-                  tickformat: '.2f',
+                  tickformat: '.2f', //make this a percentage
                 },
                 yaxis: { 
                   title: 'Days to Expiry',
@@ -67,7 +67,7 @@ const Surface: React.FC<SurfaceProps> = ({ moneyness, daysToExpiry, impliedVols 
                 },
                 zaxis: { 
                   title: 'Implied Volatility',
-                  tickformat: '.2%',
+                  tickformat: '.2%', // double check precision
                 },
                 camera: {
                   eye: { x: 2, y: 2, z: 1.5 },
