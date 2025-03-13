@@ -3,6 +3,9 @@ from scipy.interpolate import griddata
 from enum import Enum
 from typing import Optional
 from data.utils.data_schemas import VolSurface
+import os
+import sys
+sys.path.insert(0, os.path.abspath("backend"))
 
 class SurfaceType(str, Enum):
     RAW = "raw"

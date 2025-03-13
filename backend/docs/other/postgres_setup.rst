@@ -1,4 +1,5 @@
-# PostgreSQL Setup Guide
+PostgreSQL Setup
+================
 
 This guide provides step-by-step instructions to set up a PostgreSQL database for your project via the command line interface (CLI).
 

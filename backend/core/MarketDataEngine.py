@@ -16,6 +16,29 @@ warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
 
 
 class MarketDataEngine:
+    """
+    A class for managing market data collection, processing, and storage for cryptocurrency options.
+
+    This engine is responsible for:
+    - Initializing and maintaining a list of active instruments
+    - Collecting market data at regular intervals
+    - Processing and calculating volatility surfaces
+    - Storing market data and derived analytics
+
+    Attributes:
+        settings (Settings): Configuration settings for the engine
+        exchange_api (DeribitAPI): API interface for the exchange
+        vol_engine (VolatilityEngine): Engine for volatility calculations
+        currency (str): The cryptocurrency being monitored (e.g., "BTC", "ETH")
+        asset_type (str): Type of asset (default: "crypto")
+        asset_id (int): Unique identifier for the asset
+        max_retries (int): Maximum number of retry attempts for failed operations
+        min_expiry_days (int): Minimum days to expiry for monitored options
+        max_expiry_days (int): Maximum days to expiry for monitored options
+        min_moneyness (float): Minimum moneyness ratio for monitored options
+        max_moneyness (float): Maximum moneyness ratio for monitored options
+    """
+
     def __init__(
         self,
         exchange_api: DeribitAPI,
@@ -47,7 +70,18 @@ class MarketDataEngine:
         self.instruments_initialized = False
 
     async def initialize_instruments(self):
-        """Initialize the set of instruments to monitor"""
+        """
+        Initialize the set of instruments to monitor.
+
+        This method:
+        - Fetches the current price of the underlying asset
+        - Retrieves available options from the exchange
+        - Filters options based on expiry and moneyness criteria
+        - Updates the active instruments set
+
+        Returns:
+            None
+        """
         current_time = datetime.now()
         self.asset_id = self.store.get_or_create_asset(self.asset_type, self.currency)
 
@@ -94,7 +128,21 @@ class MarketDataEngine:
             self.instruments_initialized = True
           
     async def process_market_updates(self):
-        """Processing loop for market updates"""
+        """
+        Process market updates for all active instruments.
+
+        This method coordinates the main data collection and processing cycle:
+        - Checks market state
+        - Processes currency updates
+        - Updates last update timestamp
+        - Handles any errors that occur during processing
+
+        Returns:
+            None
+
+        Raises:
+            Exception: If any error occurs during processing
+        """
         self.logger.info(f"{datetime.now()}: Starting market data processing...")
 
         try:
@@ -111,7 +159,18 @@ class MarketDataEngine:
             await self._handle_error(e)
 
     async def _process_currency_updates(self):
-        """Process updates for a specific currency using OptionContract objects"""
+        """
+        Process updates for the current currency.
+
+        This method:
+        - Fetches the current price
+        - Gets the options chain
+        - Calculates the volatility surface
+        - Stores the collected and calculated data
+
+        Returns:
+            None
+        """
         print(f"{datetime.now()}: Starting to process currency updates\n")
         last_price = await self.get_last_price()
         print("fetched current price, next up options chain")
@@ -122,6 +181,15 @@ class MarketDataEngine:
         self._store_data(last_price, options_chain, surface)
    
     async def get_last_price(self) -> float:
+        """
+        Fetch the current price of the underlying asset.
+
+        Returns:
+            float: The current price of the underlying asset
+
+        Raises:
+            ValueError: If unable to get the current price
+        """
         print("GETTING LAST PRICE")
         try:
             current_price = self.exchange_api.get_last_price(self.currency)
@@ -137,6 +205,21 @@ class MarketDataEngine:
             return None
   
     def _get_options_chain(self):
+        """
+        Collect and process options chain data for active instruments.
+
+        Returns:
+            pd.DataFrame: DataFrame containing options chain data with columns:
+                - timestamp: Time of data collection
+                - symbol: Option instrument identifier
+                - strike: Strike price
+                - expiry_date: Option expiration date
+                - option_type: Put or Call
+                - last_price: Last traded price
+                - implied_vol: Implied volatility
+                - greeks: Delta, Gamma, Vega, Theta
+                - other market data
+        """
         print("GETTING OPTIONS CHAIN")
         current_time = datetime.now()
         data_points = []
@@ -188,10 +271,14 @@ class MarketDataEngine:
 
     def _get_vol_surface(self, option_chain):
         """
-        Generates the volatility surface.
-        
-        :param option_chain
-        :return vol_surface
+        Generate the volatility surface from options chain data.
+
+        Args:
+            option_chain (pd.DataFrame): Options chain data
+
+        Returns:
+            VolatilitySurface: Object containing the calculated volatility surface,
+                              including term structure and skew information
         """
         print("GETTING VOL SURFACE")
         print(f"Option chain type: {type(option_chain)}")
@@ -242,6 +329,17 @@ class MarketDataEngine:
         return vol_surface
 
     def _store_data(self, last_price, options_chain, vol_surface):
+        """
+        Store collected and calculated market data.
+
+        Args:
+            last_price (float): Current price of the underlying
+            options_chain (pd.DataFrame): Options chain data
+            vol_surface (VolatilitySurface): Calculated volatility surface
+
+        Returns:
+            None
+        """
         print("STORING DATA")
         self.store.store_underlying(last_price, self.asset_type, self.currency)
         print(f"{datetime.now()}: Underlying data stored successfully\n")
@@ -275,10 +373,18 @@ class MarketDataEngine:
     async def run(self, interval_minutes=5):
         """
         Main entry point for the market data worker.
-        Runs the market data processing loop every X minutes.
 
         Args:
             interval_minutes (int): Time in minutes between each processing cycle
+
+        This method:
+        - Initializes instruments
+        - Runs continuous processing loop
+        - Handles scheduling and error recovery
+        - Manages graceful shutdown
+
+        Returns:
+            None
         """
         self.logger.info(
             f"Starting market data worker with {interval_minutes} minute intervals"
