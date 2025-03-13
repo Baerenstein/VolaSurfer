@@ -1,0 +1,591 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Market Data Engine &mdash; VolaSurfer  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="Volatility Engine" href="VolatilityEngine.html" />
+    <link rel="prev" title="VolaSurfer Documentation" href="../index.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            VolaSurfer
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Market Data Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine</span></code></a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.settings"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.settings</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.exchange_api"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.exchange_api</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.vol_engine"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.vol_engine</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.currency"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.currency</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.asset_type"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.asset_type</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.asset_id"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.asset_id</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.max_retries"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.max_retries</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.min_expiry_days"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.min_expiry_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.max_expiry_days"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.max_expiry_days</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.min_moneyness"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.min_moneyness</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.max_moneyness"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.max_moneyness</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.get_last_price"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.get_last_price()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.initialize_instruments"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.initialize_instruments()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.process_market_updates"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.process_market_updates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.run"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.run()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="#core.MarketDataEngine.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="#main-components">Main Components</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#initialization">Initialization</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine.__init__"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.__init__()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#market-data-processing">Market Data Processing</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id0"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.process_market_updates()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine._process_currency_updates"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine._process_currency_updates()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#instrument-management">Instrument Management</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id1"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.initialize_instruments()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine._get_options_chain"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine._get_options_chain()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#market-state">Market State</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id2"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.get_last_price()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine._check_market_state"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine._check_market_state()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#volatility-surface">Volatility Surface</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine._get_vol_surface"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine._get_vol_surface()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#data-storage">Data Storage</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine._store_data"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine._store_data()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#error-handling">Error Handling</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#core.MarketDataEngine.MarketDataEngine._handle_error"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine._handle_error()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="#main-loop">Main Loop</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#id3"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine.run()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="VolatilityEngine.html">Volatility Engine</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../other/contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../other/postgres_setup.html">PostgreSQL Setup</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">VolaSurfer</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">Market Data Engine</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/core/MarketDataEngine.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="market-data-engine">
+<h1>Market Data Engine<a class="headerlink" href="#market-data-engine" title="Link to this heading"></a></h1>
+<p>The MarketDataEngine class is responsible for collecting, processing, and storing market data for cryptocurrency options.</p>
+<dl class="py class" id="module-core.MarketDataEngine">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine">
+<em class="property"><span class="pre">class</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">core.MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">MarketDataEngine</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exchange_api</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vol_engine</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">settings=Settings(STORAGE=StorageConfig(STORAGE_TYPE=&lt;StorageType.POSTGRES:</span> <span class="pre">'postgres'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ARCTIC_URI='lmdb://tmp/trading_data'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">POSTGRES_URI='postgresql://mikeb:postgres&#64;localhost:5432/optionsdb')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">MONEYNESS_RANGE=(0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">1.2)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">DAYS_TO_EXPIRY_RANGE=(2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">20))</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">currency='ETH'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">asset_type='crypto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">asset_id=0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine" title="Link to this definition"></a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></p>
+<p>A class for managing market data collection, processing, and storage for cryptocurrency options.</p>
+<p>This engine is responsible for:
+- Initializing and maintaining a list of active instruments
+- Collecting market data at regular intervals
+- Processing and calculating volatility surfaces
+- Storing market data and derived analytics</p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.settings">
+<span class="sig-name descname"><span class="pre">settings</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.settings" title="Link to this definition"></a></dt>
+<dd><p>Configuration settings for the engine</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Settings</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.exchange_api">
+<span class="sig-name descname"><span class="pre">exchange_api</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.exchange_api" title="Link to this definition"></a></dt>
+<dd><p>API interface for the exchange</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>DeribitAPI</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.vol_engine">
+<span class="sig-name descname"><span class="pre">vol_engine</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.vol_engine" title="Link to this definition"></a></dt>
+<dd><p>Engine for volatility calculations</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="VolatilityEngine.html#id2" title="core.VolatilityEngine.VolatilityEngine">VolatilityEngine</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.currency">
+<span class="sig-name descname"><span class="pre">currency</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.currency" title="Link to this definition"></a></dt>
+<dd><p>The cryptocurrency being monitored (e.g., “BTC”, “ETH”)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.asset_type">
+<span class="sig-name descname"><span class="pre">asset_type</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.asset_type" title="Link to this definition"></a></dt>
+<dd><p>Type of asset (default: “crypto”)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>str</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.asset_id">
+<span class="sig-name descname"><span class="pre">asset_id</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.asset_id" title="Link to this definition"></a></dt>
+<dd><p>Unique identifier for the asset</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.max_retries">
+<span class="sig-name descname"><span class="pre">max_retries</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.max_retries" title="Link to this definition"></a></dt>
+<dd><p>Maximum number of retry attempts for failed operations</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.min_expiry_days">
+<span class="sig-name descname"><span class="pre">min_expiry_days</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.min_expiry_days" title="Link to this definition"></a></dt>
+<dd><p>Minimum days to expiry for monitored options</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.max_expiry_days">
+<span class="sig-name descname"><span class="pre">max_expiry_days</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.max_expiry_days" title="Link to this definition"></a></dt>
+<dd><p>Maximum days to expiry for monitored options</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>int</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.min_moneyness">
+<span class="sig-name descname"><span class="pre">min_moneyness</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.min_moneyness" title="Link to this definition"></a></dt>
+<dd><p>Minimum moneyness ratio for monitored options</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.max_moneyness">
+<span class="sig-name descname"><span class="pre">max_moneyness</span></span><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.max_moneyness" title="Link to this definition"></a></dt>
+<dd><p>Maximum moneyness ratio for monitored options</p>
+<dl class="field-list simple">
+<dt class="field-odd">Type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>float</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.get_last_price">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_last_price</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.get_last_price"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.get_last_price" title="Link to this definition"></a></dt>
+<dd><p>Fetch the current price of the underlying asset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The current price of the underlying asset</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>float</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If unable to get the current price</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.initialize_instruments">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">initialize_instruments</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.initialize_instruments"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.initialize_instruments" title="Link to this definition"></a></dt>
+<dd><p>Initialize the set of instruments to monitor.</p>
+<p>This method:
+- Fetches the current price of the underlying asset
+- Retrieves available options from the exchange
+- Filters options based on expiry and moneyness criteria
+- Updates the active instruments set</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.process_market_updates">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">process_market_updates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.process_market_updates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.process_market_updates" title="Link to this definition"></a></dt>
+<dd><p>Process market updates for all active instruments.</p>
+<p>This method coordinates the main data collection and processing cycle:
+- Checks market state
+- Processes currency updates
+- Updates last update timestamp
+- Handles any errors that occur during processing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>Exception</strong> – If any error occurs during processing</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.run">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">interval_minutes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.run" title="Link to this definition"></a></dt>
+<dd><p>Main entry point for the market data worker.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>interval_minutes</strong> (<em>int</em>) – Time in minutes between each processing cycle</p>
+</dd>
+</dl>
+<p>This method:
+- Initializes instruments
+- Runs continuous processing loop
+- Handles scheduling and error recovery
+- Manages graceful shutdown</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="core.MarketDataEngine.main">
+<em class="property"><span class="k"><span class="pre">async</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">core.MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.main" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<section id="main-components">
+<h2>Main Components<a class="headerlink" href="#main-components" title="Link to this heading"></a></h2>
+<section id="initialization">
+<h3>Initialization<a class="headerlink" href="#initialization" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine.__init__">
+<span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">__init__</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">exchange_api</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vol_engine</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">settings=Settings(STORAGE=StorageConfig(STORAGE_TYPE=&lt;StorageType.POSTGRES:</span> <span class="pre">'postgres'&gt;</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ARCTIC_URI='lmdb://tmp/trading_data'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">POSTGRES_URI='postgresql://mikeb:postgres&#64;localhost:5432/optionsdb')</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">MONEYNESS_RANGE=(0.8</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">1.2)</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">DAYS_TO_EXPIRY_RANGE=(2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">20))</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">currency='ETH'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">asset_type='crypto'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">asset_id=0</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.__init__"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine.__init__" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="market-data-processing">
+<h3>Market Data Processing<a class="headerlink" href="#market-data-processing" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="id0">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">process_market_updates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.process_market_updates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id0" title="Link to this definition"></a></dt>
+<dd><p>Process market updates for all active instruments.</p>
+<p>This method coordinates the main data collection and processing cycle:
+- Checks market state
+- Processes currency updates
+- Updates last update timestamp
+- Handles any errors that occur during processing</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>Exception</strong> – If any error occurs during processing</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine._process_currency_updates">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">_process_currency_updates</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine._process_currency_updates"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine._process_currency_updates" title="Link to this definition"></a></dt>
+<dd><p>Process updates for the current currency.</p>
+<p>This method:
+- Fetches the current price
+- Gets the options chain
+- Calculates the volatility surface
+- Stores the collected and calculated data</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="instrument-management">
+<h3>Instrument Management<a class="headerlink" href="#instrument-management" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="id1">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">initialize_instruments</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.initialize_instruments"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id1" title="Link to this definition"></a></dt>
+<dd><p>Initialize the set of instruments to monitor.</p>
+<p>This method:
+- Fetches the current price of the underlying asset
+- Retrieves available options from the exchange
+- Filters options based on expiry and moneyness criteria
+- Updates the active instruments set</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine._get_options_chain">
+<span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">_get_options_chain</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine._get_options_chain"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine._get_options_chain" title="Link to this definition"></a></dt>
+<dd><p>Collect and process options chain data for active instruments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p><dl class="simple">
+<dt>DataFrame containing options chain data with columns:</dt><dd><ul class="simple">
+<li><p>timestamp: Time of data collection</p></li>
+<li><p>symbol: Option instrument identifier</p></li>
+<li><p>strike: Strike price</p></li>
+<li><p>expiry_date: Option expiration date</p></li>
+<li><p>option_type: Put or Call</p></li>
+<li><p>last_price: Last traded price</p></li>
+<li><p>implied_vol: Implied volatility</p></li>
+<li><p>greeks: Delta, Gamma, Vega, Theta</p></li>
+<li><p>other market data</p></li>
+</ul>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>pd.DataFrame</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="market-state">
+<h3>Market State<a class="headerlink" href="#market-state" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="id2">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">get_last_price</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.get_last_price"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id2" title="Link to this definition"></a></dt>
+<dd><p>Fetch the current price of the underlying asset.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>The current price of the underlying asset</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p>float</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>ValueError</strong> – If unable to get the current price</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine._check_market_state">
+<span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">_check_market_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine._check_market_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine._check_market_state" title="Link to this definition"></a></dt>
+<dd><p>Check if market is in normal operating state</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="volatility-surface">
+<h3>Volatility Surface<a class="headerlink" href="#volatility-surface" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine._get_vol_surface">
+<span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">_get_vol_surface</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">option_chain</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine._get_vol_surface"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine._get_vol_surface" title="Link to this definition"></a></dt>
+<dd><p>Generate the volatility surface from options chain data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>option_chain</strong> (<em>pd.DataFrame</em>) – Options chain data</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><dl class="simple">
+<dt>Object containing the calculated volatility surface,</dt><dd><p>including term structure and skew information</p>
+</dd>
+</dl>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>VolatilitySurface</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="data-storage">
+<h3>Data Storage<a class="headerlink" href="#data-storage" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine._store_data">
+<span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">_store_data</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">last_price</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">options_chain</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">vol_surface</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine._store_data"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine._store_data" title="Link to this definition"></a></dt>
+<dd><p>Store collected and calculated market data.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>last_price</strong> (<em>float</em>) – Current price of the underlying</p></li>
+<li><p><strong>options_chain</strong> (<em>pd.DataFrame</em>) – Options chain data</p></li>
+<li><p><strong>vol_surface</strong> (<em>VolatilitySurface</em>) – Calculated volatility surface</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="error-handling">
+<h3>Error Handling<a class="headerlink" href="#error-handling" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="core.MarketDataEngine.MarketDataEngine._handle_error">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">_handle_error</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">error</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine._handle_error"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#core.MarketDataEngine.MarketDataEngine._handle_error" title="Link to this definition"></a></dt>
+<dd><p>Handle processing errors</p>
+</dd></dl>
+
+</section>
+<section id="main-loop">
+<h3>Main Loop<a class="headerlink" href="#main-loop" title="Link to this heading"></a></h3>
+<dl class="py method">
+<dt class="sig sig-object py" id="id3">
+<em class="property"><span class="pre">async</span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">MarketDataEngine.</span></span><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">interval_minutes</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/core/MarketDataEngine.html#MarketDataEngine.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#id3" title="Link to this definition"></a></dt>
+<dd><p>Main entry point for the market data worker.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>interval_minutes</strong> (<em>int</em>) – Time in minutes between each processing cycle</p>
+</dd>
+</dl>
+<p>This method:
+- Initializes instruments
+- Runs continuous processing loop
+- Handles scheduling and error recovery
+- Manages graceful shutdown</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>None</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="../index.html" class="btn btn-neutral float-left" title="VolaSurfer Documentation" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="VolatilityEngine.html" class="btn btn-neutral float-right" title="Volatility Engine" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Mike Beckhusen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

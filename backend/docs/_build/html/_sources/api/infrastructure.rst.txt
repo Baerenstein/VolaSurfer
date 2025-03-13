@@ -1,7 +1,0 @@
-Infrastructure API Reference
-============================
-
-.. automodule:: infrastructure
-   :members:
-   :undoc-members:
-   :show-inheritance:

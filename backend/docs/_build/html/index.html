@@ -19,7 +19,7 @@
     <script src="_static/js/theme.js"></script>
     <link rel="index" title="Index" href="genindex.html" />
     <link rel="search" title="Search" href="search.html" />
-    <link rel="next" title="Contributing" href="user/contributing.html" /> 
+    <link rel="next" title="Market Data Engine" href="core/MarketDataEngine.html" /> 
 </head>
 
 <body class="wy-body-for-nav"> 
@@ -41,16 +41,15 @@
   </form>
 </div>
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
-              <p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+              <p class="caption" role="heading"><span class="caption-text">Core Components</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="user/contributing.html">Contributing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="user/postgres_setup.html">PostgreSQL Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="core/MarketDataEngine.html">Market Data Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="core/VolatilityEngine.html">Volatility Engine</a></li>
 </ul>
-<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="api/core.html">Core Module</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api/server.html">Server API Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api/infrastructure.html">Infrastructure API Reference</a></li>
+<li class="toctree-l1"><a class="reference internal" href="other/contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="other/postgres_setup.html">PostgreSQL Setup</a></li>
 </ul>
 
         </div>
@@ -81,28 +80,33 @@
 <h1>VolaSurfer Documentation<a class="headerlink" href="#volasurfer-documentation" title="Link to this heading"></a></h1>
 <p>Welcome to VolaSurfer’s documentation. This documentation covers both the technical implementation
 and usage guides for the project.</p>
-<section id="user-guide">
-<h2>User Guide<a class="headerlink" href="#user-guide" title="Link to this heading"></a></h2>
+<section id="core-components">
+<h2>Core Components<a class="headerlink" href="#core-components" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<p class="caption" role="heading"><span class="caption-text">Core Components</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="user/contributing.html">Contributing</a></li>
-<li class="toctree-l1"><a class="reference internal" href="user/postgres_setup.html">PostgreSQL Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="core/MarketDataEngine.html">Market Data Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine"><code class="docutils literal notranslate"><span class="pre">MarketDataEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="core/MarketDataEngine.html#core.MarketDataEngine.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="core/MarketDataEngine.html#main-components">Main Components</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="core/VolatilityEngine.html">Volatility Engine</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="core/VolatilityEngine.html#core.VolatilityEngine.VolPoints"><code class="docutils literal notranslate"><span class="pre">VolPoints</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="core/VolatilityEngine.html#core.VolatilityEngine.VolatilityEngine"><code class="docutils literal notranslate"><span class="pre">VolatilityEngine</span></code></a></li>
+<li class="toctree-l2"><a class="reference internal" href="core/VolatilityEngine.html#core-components">Core Components</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </section>
-<section id="api-documentation">
-<h2>API Documentation<a class="headerlink" href="#api-documentation" title="Link to this heading"></a></h2>
+<section id="user-documentation">
+<h2>User Documentation<a class="headerlink" href="#user-documentation" title="Link to this heading"></a></h2>
 <div class="toctree-wrapper compound">
-<p class="caption" role="heading"><span class="caption-text">API Reference</span></p>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
 <ul>
-<li class="toctree-l1"><a class="reference internal" href="api/core.html">Core Module</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api/server.html">Server API Reference</a></li>
-<li class="toctree-l1"><a class="reference internal" href="api/infrastructure.html">Infrastructure API Reference</a><ul>
-<li class="toctree-l2"><a class="reference internal" href="api/infrastructure.html#infrastructure.Settings"><code class="docutils literal notranslate"><span class="pre">Settings</span></code></a></li>
-<li class="toctree-l2"><a class="reference internal" href="api/infrastructure.html#infrastructure.setup_logger"><code class="docutils literal notranslate"><span class="pre">setup_logger()</span></code></a></li>
-</ul>
-</li>
+<li class="toctree-l1"><a class="reference internal" href="other/contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="other/postgres_setup.html">PostgreSQL Setup</a></li>
 </ul>
 </div>
 </section>
@@ -120,7 +124,7 @@ and usage guides for the project.</p>
            </div>
           </div>
           <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
-        <a href="user/contributing.html" class="btn btn-neutral float-right" title="Contributing" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+        <a href="core/MarketDataEngine.html" class="btn btn-neutral float-right" title="Market Data Engine" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
     </div>
 
   <hr/>

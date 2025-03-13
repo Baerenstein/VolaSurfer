@@ -1,0 +1,596 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>core.MarketDataEngine &mdash; VolaSurfer  documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../_static/documentation_options.js?v=5929fcd5"></script>
+      <script src="../../_static/doctools.js?v=9a2dae69"></script>
+      <script src="../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../index.html" class="icon icon-home">
+            VolaSurfer
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Core Components</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../core/MarketDataEngine.html">Market Data Engine</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../core/VolatilityEngine.html">Volatility Engine</a></li>
+</ul>
+<p class="caption" role="heading"><span class="caption-text">User Guide</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../other/contributing.html">Contributing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../../other/postgres_setup.html">PostgreSQL Setup</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../index.html">VolaSurfer</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">core.MarketDataEngine</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for core.MarketDataEngine</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">asyncio</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">datetime</span><span class="w"> </span><span class="kn">import</span> <span class="n">datetime</span><span class="p">,</span> <span class="n">timedelta</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">signal</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">infrastructure.settings</span><span class="w"> </span><span class="kn">import</span> <span class="n">Settings</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">data.exchanges.deribit</span><span class="w"> </span><span class="kn">import</span> <span class="n">DeribitAPI</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">core.VolatilityEngine</span><span class="w"> </span><span class="kn">import</span> <span class="n">VolatilityEngine</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">data.storage</span><span class="w"> </span><span class="kn">import</span> <span class="n">StorageFactory</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">infrastructure.utils.logging</span><span class="w"> </span><span class="kn">import</span> <span class="n">setup_logger</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">data.utils.data_schemas</span><span class="w"> </span><span class="kn">import</span> <span class="n">OptionContract</span><span class="p">,</span> <span class="n">MarketState</span> 
+
+<span class="n">warnings</span><span class="o">.</span><span class="n">simplefilter</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">FutureWarning</span><span class="p">)</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">&quot;ignore&quot;</span><span class="p">,</span> <span class="n">category</span><span class="o">=</span><span class="ne">UserWarning</span><span class="p">,</span> <span class="n">module</span><span class="o">=</span><span class="s2">&quot;pandas&quot;</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="MarketDataEngine">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MarketDataEngine</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class for managing market data collection, processing, and storage for cryptocurrency options.</span>
+
+<span class="sd">    This engine is responsible for:</span>
+<span class="sd">    - Initializing and maintaining a list of active instruments</span>
+<span class="sd">    - Collecting market data at regular intervals</span>
+<span class="sd">    - Processing and calculating volatility surfaces</span>
+<span class="sd">    - Storing market data and derived analytics</span>
+
+<span class="sd">    Attributes:</span>
+<span class="sd">        settings (Settings): Configuration settings for the engine</span>
+<span class="sd">        exchange_api (DeribitAPI): API interface for the exchange</span>
+<span class="sd">        vol_engine (VolatilityEngine): Engine for volatility calculations</span>
+<span class="sd">        currency (str): The cryptocurrency being monitored (e.g., &quot;BTC&quot;, &quot;ETH&quot;)</span>
+<span class="sd">        asset_type (str): Type of asset (default: &quot;crypto&quot;)</span>
+<span class="sd">        asset_id (int): Unique identifier for the asset</span>
+<span class="sd">        max_retries (int): Maximum number of retry attempts for failed operations</span>
+<span class="sd">        min_expiry_days (int): Minimum days to expiry for monitored options</span>
+<span class="sd">        max_expiry_days (int): Maximum days to expiry for monitored options</span>
+<span class="sd">        min_moneyness (float): Minimum moneyness ratio for monitored options</span>
+<span class="sd">        max_moneyness (float): Maximum moneyness ratio for monitored options</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="MarketDataEngine.__init__">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine.__init__">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">exchange_api</span><span class="p">:</span> <span class="n">DeribitAPI</span><span class="p">,</span>
+        <span class="n">vol_engine</span><span class="p">:</span> <span class="n">VolatilityEngine</span><span class="p">,</span>
+        <span class="n">settings</span><span class="p">:</span> <span class="n">Settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">(),</span>
+        <span class="n">currency</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ETH&quot;</span><span class="p">,</span>
+        <span class="n">asset_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;crypto&quot;</span><span class="p">,</span>
+        <span class="n">asset_id</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">settings</span> <span class="o">=</span> <span class="n">settings</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exchange_api</span> <span class="o">=</span> <span class="n">exchange_api</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span> <span class="o">=</span> <span class="n">vol_engine</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">currency</span> <span class="o">=</span> <span class="n">currency</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">asset_type</span> <span class="o">=</span> <span class="n">asset_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">asset_id</span> <span class="o">=</span> <span class="n">asset_id</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span> <span class="o">=</span> <span class="n">StorageFactory</span><span class="o">.</span><span class="n">create_storage</span><span class="p">(</span><span class="n">settings</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">MarketState</span><span class="p">(</span>
+            <span class="n">last_update</span><span class="o">=</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">(),</span> <span class="n">active_instruments</span><span class="o">=</span><span class="nb">set</span><span class="p">(),</span> <span class="n">last_price</span><span class="o">=</span><span class="nb">float</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_expiry_days</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_expiry_days</span> <span class="o">=</span> <span class="mi">90</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_moneyness</span> <span class="o">=</span> <span class="mf">0.5</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_moneyness</span> <span class="o">=</span> <span class="mf">1.5</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">setup_logger</span><span class="p">(</span><span class="s2">&quot;market_data_worker&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">instruments_initialized</span> <span class="o">=</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine.initialize_instruments">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine.initialize_instruments">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">initialize_instruments</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the set of instruments to monitor.</span>
+
+<span class="sd">        This method:</span>
+<span class="sd">        - Fetches the current price of the underlying asset</span>
+<span class="sd">        - Retrieves available options from the exchange</span>
+<span class="sd">        - Filters options based on expiry and moneyness criteria</span>
+<span class="sd">        - Updates the active instruments set</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">asset_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">get_or_create_asset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">asset_type</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="p">)</span>
+
+        <span class="c1"># add time check for when was the last time</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">instruments_initialized</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Instruments have already been initialized.&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">current_price</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_last_price</span><span class="p">()</span>
+        <span class="n">instruments</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange_api</span><span class="o">.</span><span class="n">get_options</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="p">)</span>
+
+        <span class="c1"># this below should be optimised</span>
+        <span class="n">filtered</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">inst</span> <span class="ow">in</span> <span class="n">instruments</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;options&quot;</span><span class="p">,</span> <span class="p">[]):</span>
+            <span class="n">option_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange_api</span><span class="o">.</span><span class="n">get_option_data</span><span class="p">(</span><span class="n">inst</span><span class="p">[</span><span class="s2">&quot;instrument_name&quot;</span><span class="p">])</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">option_data</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">option_data</span><span class="p">[</span><span class="s2">&quot;last_price&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">parts</span> <span class="o">=</span> <span class="n">inst</span><span class="p">[</span><span class="s2">&quot;instrument_name&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">expiry_date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;</span><span class="si">%d</span><span class="s2">%b%y&quot;</span><span class="p">)</span>
+                <span class="n">days_to_expiry</span> <span class="o">=</span> <span class="p">(</span><span class="n">expiry_date</span><span class="o">.</span><span class="n">date</span><span class="p">()</span> <span class="o">-</span> <span class="n">current_time</span><span class="o">.</span><span class="n">date</span><span class="p">())</span><span class="o">.</span><span class="n">days</span>
+                <span class="n">strike</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                <span class="n">moneyness</span> <span class="o">=</span> <span class="n">strike</span> <span class="o">/</span> <span class="n">current_price</span>
+                <span class="k">if</span> <span class="p">(</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">min_expiry_days</span> <span class="o">&lt;=</span> <span class="n">days_to_expiry</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_expiry_days</span>
+                    <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_moneyness</span> <span class="o">&lt;=</span> <span class="n">moneyness</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_moneyness</span>
+                <span class="p">):</span>
+                    <span class="n">filtered</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">inst</span><span class="p">)</span>
+            <span class="k">except</span> <span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="ne">IndexError</span><span class="p">)</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                    <span class="sa">f</span><span class="s2">&quot;Error parsing instrument </span><span class="si">{</span><span class="n">inst</span><span class="p">[</span><span class="s1">&#39;instrument_name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="p">)</span>
+                <span class="k">continue</span>
+        
+        <span class="k">if</span> <span class="n">filtered</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">active_instruments</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">symbol</span><span class="p">[</span><span class="s2">&quot;instrument_name&quot;</span><span class="p">]</span> <span class="k">for</span> <span class="n">symbol</span> <span class="ow">in</span> <span class="n">filtered</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                <span class="sa">f</span><span class="s2">&quot;Added </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">filtered</span><span class="p">)</span><span class="si">}</span><span class="s2"> filtered instruments for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">instruments_initialized</span> <span class="o">=</span> <span class="kc">True</span></div>
+
+          
+<div class="viewcode-block" id="MarketDataEngine.process_market_updates">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine.process_market_updates">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">process_market_updates</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process market updates for all active instruments.</span>
+
+<span class="sd">        This method coordinates the main data collection and processing cycle:</span>
+<span class="sd">        - Checks market state</span>
+<span class="sd">        - Processes currency updates</span>
+<span class="sd">        - Updates last update timestamp</span>
+<span class="sd">        - Handles any errors that occur during processing</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            Exception: If any error occurs during processing</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">}</span><span class="s2">: Starting market data processing...&quot;</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># if not self._check_market_state():</span>
+            <span class="c1">#     await asyncio.sleep(60)</span>
+
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_process_currency_updates</span><span class="p">()</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">last_update</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">error_count</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">}</span><span class="s2">: Last update: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">last_update</span><span class="si">}</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine._process_currency_updates">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine._process_currency_updates">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_process_currency_updates</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Process updates for the current currency.</span>
+
+<span class="sd">        This method:</span>
+<span class="sd">        - Fetches the current price</span>
+<span class="sd">        - Gets the options chain</span>
+<span class="sd">        - Calculates the volatility surface</span>
+<span class="sd">        - Stores the collected and calculated data</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">}</span><span class="s2">: Starting to process currency updates</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">last_price</span> <span class="o">=</span> <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_last_price</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;fetched current price, next up options chain&quot;</span><span class="p">)</span>
+        <span class="n">options_chain</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_options_chain</span><span class="p">()</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;options chain retrieved successfully, lets get wavy!&quot;</span><span class="p">)</span>
+        <span class="n">surface</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_vol_surface</span><span class="p">(</span><span class="n">options_chain</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;... almost done, surfaces are about to be surfed&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_store_data</span><span class="p">(</span><span class="n">last_price</span><span class="p">,</span> <span class="n">options_chain</span><span class="p">,</span> <span class="n">surface</span><span class="p">)</span></div>
+
+   
+<div class="viewcode-block" id="MarketDataEngine.get_last_price">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine.get_last_price">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">get_last_price</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fetch the current price of the underlying asset.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            float: The current price of the underlying asset</span>
+
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If unable to get the current price</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;GETTING LAST PRICE&quot;</span><span class="p">)</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">current_price</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange_api</span><span class="o">.</span><span class="n">get_last_price</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="p">)</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">current_price</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Could not get price for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">last_price</span> <span class="o">=</span> <span class="n">current_price</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">}</span><span class="s2">: Last price: </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">last_price</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">current_price</span>
+
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error getting last price for </span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="k">return</span> <span class="kc">None</span></div>
+
+  
+<div class="viewcode-block" id="MarketDataEngine._get_options_chain">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine._get_options_chain">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_options_chain</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Collect and process options chain data for active instruments.</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            pd.DataFrame: DataFrame containing options chain data with columns:</span>
+<span class="sd">                - timestamp: Time of data collection</span>
+<span class="sd">                - symbol: Option instrument identifier</span>
+<span class="sd">                - strike: Strike price</span>
+<span class="sd">                - expiry_date: Option expiration date</span>
+<span class="sd">                - option_type: Put or Call</span>
+<span class="sd">                - last_price: Last traded price</span>
+<span class="sd">                - implied_vol: Implied volatility</span>
+<span class="sd">                - greeks: Delta, Gamma, Vega, Theta</span>
+<span class="sd">                - other market data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;GETTING OPTIONS CHAIN&quot;</span><span class="p">)</span>
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="n">data_points</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">symbol</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">active_instruments</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">currency</span> <span class="ow">in</span> <span class="n">symbol</span><span class="p">:</span>
+                <span class="n">option_data</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">exchange_api</span><span class="o">.</span><span class="n">get_option_data</span><span class="p">(</span><span class="n">symbol</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">option_data</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">LookupError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;No option data found for symbol: </span><span class="si">{</span><span class="n">symbol</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+                <span class="n">parts</span> <span class="o">=</span> <span class="n">symbol</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;-&quot;</span><span class="p">)</span>
+                <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">parts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+                    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid symbol format: </span><span class="si">{</span><span class="n">symbol</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="n">expiry_date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">&quot;</span><span class="si">%d</span><span class="s2">%b%y&quot;</span><span class="p">)</span>
+                <span class="n">days_to_expiry</span> <span class="o">=</span> <span class="p">(</span><span class="n">expiry_date</span><span class="o">.</span><span class="n">date</span><span class="p">()</span> <span class="o">-</span> <span class="n">current_time</span><span class="o">.</span><span class="n">date</span><span class="p">())</span><span class="o">.</span><span class="n">days</span>
+                <span class="n">strike</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">parts</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+                <span class="n">price</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">last_price</span>
+                <span class="n">moneyness</span> <span class="o">=</span> <span class="n">strike</span> <span class="o">/</span> <span class="n">price</span> <span class="k">if</span> <span class="n">price</span> <span class="k">else</span> <span class="kc">None</span>
+
+                <span class="n">option</span> <span class="o">=</span> <span class="n">OptionContract</span><span class="p">(</span>
+                    <span class="n">timestamp</span><span class="o">=</span><span class="n">current_time</span><span class="p">,</span>
+                    <span class="n">asset_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">asset_id</span><span class="p">,</span>
+                    <span class="n">base_currency</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="p">,</span>
+                    <span class="n">symbol</span><span class="o">=</span><span class="n">symbol</span><span class="p">,</span>
+                    <span class="n">expiry_date</span><span class="o">=</span><span class="n">expiry_date</span><span class="p">,</span>
+                    <span class="n">days_to_expiry</span><span class="o">=</span><span class="n">days_to_expiry</span><span class="p">,</span>
+                    <span class="n">strike</span><span class="o">=</span><span class="n">strike</span><span class="p">,</span>
+                    <span class="n">moneyness</span><span class="o">=</span><span class="n">moneyness</span><span class="p">,</span>
+                    <span class="n">option_type</span><span class="o">=</span><span class="n">parts</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span>
+                    <span class="n">last_price</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;last_price&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                    <span class="n">implied_vol</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;implied_vol&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                    <span class="n">bid_price</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;bid_price&quot;</span><span class="p">),</span>
+                    <span class="n">ask_price</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;ask_price&quot;</span><span class="p">),</span>
+                    <span class="n">delta</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;delta&quot;</span><span class="p">),</span>
+                    <span class="n">gamma</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;gamma&quot;</span><span class="p">),</span>
+                    <span class="n">vega</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;vega&quot;</span><span class="p">),</span>
+                    <span class="n">theta</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;theta&quot;</span><span class="p">),</span>
+                    <span class="n">open_interest</span><span class="o">=</span><span class="n">option_data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">&quot;open_interest&quot;</span><span class="p">),</span>
+                    <span class="n">snapshot_id</span><span class="o">=</span><span class="n">current_time</span><span class="o">.</span><span class="n">isoformat</span><span class="p">(),</span> <span class="c1"># change snapshot id method</span>
+                <span class="p">)</span>
+
+                <span class="n">data_points</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">option</span><span class="p">)</span>
+                <span class="n">options_dicts</span> <span class="o">=</span> <span class="p">[</span><span class="nb">vars</span><span class="p">(</span><span class="n">option</span><span class="p">)</span> <span class="k">for</span> <span class="n">option</span> <span class="ow">in</span> <span class="n">data_points</span><span class="p">]</span>
+                <span class="n">options_chain</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">options_dicts</span><span class="p">)</span>
+                <span class="n">options_chain</span><span class="p">[</span><span class="s2">&quot;bid_price&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">options_chain</span><span class="p">[</span><span class="s2">&quot;ask_price&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+                <span class="n">options_chain</span><span class="p">[</span><span class="s2">&quot;open_interest&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">fillna</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">inplace</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">options_chain</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine._get_vol_surface">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine._get_vol_surface">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_vol_surface</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">option_chain</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generate the volatility surface from options chain data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            option_chain (pd.DataFrame): Options chain data</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            VolatilitySurface: Object containing the calculated volatility surface,</span>
+<span class="sd">                              including term structure and skew information</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;GETTING VOL SURFACE&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Option chain type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">option_chain</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Option chain length: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">option_chain</span><span class="p">)</span><span class="w"> </span><span class="k">if</span><span class="w"> </span><span class="n">option_chain</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="kc">None</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="s1">&#39;None&#39;</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">option_chain</span><span class="o">.</span><span class="n">itertuples</span><span class="p">():</span>
+            <span class="c1"># print(f&quot;Processing option: {row.symbol}&quot;)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">add_market_data</span><span class="p">(</span>
+                <span class="n">timestamp</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">timestamp</span><span class="p">,</span>
+                <span class="n">strike</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">strike</span><span class="p">,</span>
+                <span class="n">moneyness</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">moneyness</span><span class="p">,</span>
+                <span class="n">option_type</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">option_type</span><span class="p">,</span>
+                <span class="n">expiry_date</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">expiry_date</span><span class="p">,</span>
+                <span class="n">days_to_expiry</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">days_to_expiry</span><span class="p">,</span>
+                <span class="n">implied_vol</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">implied_vol</span><span class="p">,</span>
+                <span class="n">delta</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">delta</span><span class="p">,</span>
+                <span class="n">gamma</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">gamma</span><span class="p">,</span>
+                <span class="n">vega</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">vega</span><span class="p">,</span>
+                <span class="n">theta</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">theta</span><span class="p">,</span>
+                <span class="n">snapshot_id</span><span class="o">=</span><span class="n">row</span><span class="o">.</span><span class="n">snapshot_id</span><span class="p">,</span>
+                <span class="n">asset_id</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">asset_id</span><span class="p">,</span>
+            <span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;All options processed, generating surface...&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># snapshot_id = datetime.now().isoformat()</span>
+        <span class="c1"># print(f&quot;Using snapshot_id: {snapshot_id}&quot;)</span>
+        <span class="n">snapshot_id</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">get_latest_snapshot_id</span><span class="p">()</span>
+        <span class="n">vol_surface</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">get_volatility_surface</span><span class="p">(</span><span class="n">snapshot_id</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">asset_id</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Vol surface generated: </span><span class="si">{</span><span class="n">vol_surface</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="kc">None</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">vol_surface</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Surface contains </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">vol_surface</span><span class="o">.</span><span class="n">strikes</span><span class="p">)</span><span class="si">}</span><span class="s2"> points&quot;</span><span class="p">)</span>
+
+        <span class="n">skews</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">get_skews</span><span class="p">(</span><span class="n">vol_surface</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skew generated: </span><span class="si">{</span><span class="n">skews</span><span class="w"> </span><span class="ow">is</span><span class="w"> </span><span class="ow">not</span><span class="w"> </span><span class="kc">None</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Skew contains </span><span class="si">{</span><span class="n">skews</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">term_structure</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">_get_term_structure</span><span class="p">(</span><span class="n">vol_surface</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Term structure contains </span><span class="si">{</span><span class="n">term_structure</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># # get implied volatility index</span>
+        <span class="n">implied_volatility_index</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">get_implied_volatility_index</span><span class="p">(</span><span class="n">vol_surface</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Implied volatility index generated: </span><span class="si">{</span><span class="n">implied_volatility_index</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="n">surface_metrics</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">vol_engine</span><span class="o">.</span><span class="n">get_surface_metrics</span><span class="p">(</span><span class="n">vol_surface</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Surface metrics generated: </span><span class="si">{</span><span class="n">surface_metrics</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">vol_surface</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine._store_data">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine._store_data">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_store_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">last_price</span><span class="p">,</span> <span class="n">options_chain</span><span class="p">,</span> <span class="n">vol_surface</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Store collected and calculated market data.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            last_price (float): Current price of the underlying</span>
+<span class="sd">            options_chain (pd.DataFrame): Options chain data</span>
+<span class="sd">            vol_surface (VolatilitySurface): Calculated volatility surface</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;STORING DATA&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">store_underlying</span><span class="p">(</span><span class="n">last_price</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">asset_type</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">currency</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">}</span><span class="s2">: Underlying data stored successfully</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span><span class="si">}</span><span class="s2">: Storing options chain</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">store_options_chain</span><span class="p">(</span><span class="n">options_chain</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">store</span><span class="o">.</span><span class="n">store_surface</span><span class="p">(</span><span class="n">vol_surface</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine._check_market_state">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine._check_market_state">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_check_market_state</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if market is in normal operating state&quot;&quot;&quot;</span>
+        <span class="n">current_time</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+        <span class="n">is_weekend</span> <span class="o">=</span> <span class="n">current_time</span><span class="o">.</span><span class="n">weekday</span><span class="p">()</span> <span class="o">&gt;=</span> <span class="mi">5</span>
+        <span class="n">updates_stale</span> <span class="o">=</span> <span class="p">(</span><span class="n">current_time</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">last_update</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span> <span class="o">&gt;</span> <span class="mi">60</span>
+        <span class="n">too_many_errors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">error_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span>
+
+        <span class="k">return</span> <span class="ow">not</span> <span class="p">(</span><span class="n">is_weekend</span> <span class="ow">or</span> <span class="n">updates_stale</span> <span class="ow">or</span> <span class="n">too_many_errors</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine._handle_error">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine._handle_error">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">_handle_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">error</span><span class="p">:</span> <span class="ne">Exception</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Handle processing errors&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">error_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Processing error: </span><span class="si">{</span><span class="n">error</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">error_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">critical</span><span class="p">(</span><span class="s2">&quot;Max retries exceeded. Initiating shutdown...&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">is_running</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">wait_time</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="mi">120</span><span class="p">,</span> <span class="mi">2</span><span class="o">**</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">error_count</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Retrying in </span><span class="si">{</span><span class="n">wait_time</span><span class="si">}</span><span class="s2"> seconds...&quot;</span><span class="p">)</span>
+            <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">wait_time</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="MarketDataEngine.run">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.MarketDataEngine.run">[docs]</a>
+    <span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">interval_minutes</span><span class="o">=</span><span class="mi">5</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Main entry point for the market data worker.</span>
+
+<span class="sd">        Args:</span>
+<span class="sd">            interval_minutes (int): Time in minutes between each processing cycle</span>
+
+<span class="sd">        This method:</span>
+<span class="sd">        - Initializes instruments</span>
+<span class="sd">        - Runs continuous processing loop</span>
+<span class="sd">        - Handles scheduling and error recovery</span>
+<span class="sd">        - Manages graceful shutdown</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            None</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+            <span class="sa">f</span><span class="s2">&quot;Starting market data worker with </span><span class="si">{</span><span class="n">interval_minutes</span><span class="si">}</span><span class="s2"> minute intervals&quot;</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Initialize instruments once at startup</span>
+        <span class="c1"># TODO should be called only once per day</span>
+        <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">initialize_instruments</span><span class="p">()</span>
+
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">cycle_start</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Starting new data collection cycle&quot;</span><span class="p">)</span>
+
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">process_market_updates</span><span class="p">()</span>
+
+                <span class="c1"># Calculate time until next run</span>
+                <span class="n">cycle_duration</span> <span class="o">=</span> <span class="p">(</span><span class="n">datetime</span><span class="o">.</span><span class="n">now</span><span class="p">()</span> <span class="o">-</span> <span class="n">cycle_start</span><span class="p">)</span><span class="o">.</span><span class="n">total_seconds</span><span class="p">()</span>
+                <span class="n">sleep_time</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">interval_minutes</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">-</span> <span class="n">cycle_duration</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">sleep_time</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Cycle completed in </span><span class="si">{</span><span class="n">cycle_duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s. Sleeping for </span><span class="si">{</span><span class="n">sleep_time</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s&quot;</span>
+                    <span class="p">)</span>
+                    <span class="k">await</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="n">sleep_time</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span>
+                        <span class="sa">f</span><span class="s2">&quot;Cycle took </span><span class="si">{</span><span class="n">cycle_duration</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">s, longer than the </span><span class="si">{</span><span class="n">interval_minutes</span><span class="si">}</span><span class="s2"> minute interval&quot;</span>
+                    <span class="p">)</span>
+            <span class="k">except</span> <span class="n">asyncio</span><span class="o">.</span><span class="n">CancelledError</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Worker shutdown requested&quot;</span><span class="p">)</span>
+                <span class="k">break</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Error in processing cycle: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                <span class="k">await</span> <span class="bp">self</span><span class="o">.</span><span class="n">_handle_error</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">error_count</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_retries</span><span class="p">:</span>
+                    <span class="k">break</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../core/MarketDataEngine.html#core.MarketDataEngine.main">[docs]</a>
+<span class="k">async</span> <span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+    <span class="n">settings</span> <span class="o">=</span> <span class="n">Settings</span><span class="p">()</span>
+
+    <span class="n">exchange_api</span> <span class="o">=</span> <span class="n">DeribitAPI</span><span class="p">()</span>
+    <span class="n">vol_engine</span> <span class="o">=</span> <span class="n">VolatilityEngine</span><span class="p">()</span>
+    <span class="n">currency</span> <span class="o">=</span> <span class="s2">&quot;BTC&quot;</span>
+
+    <span class="n">worker</span> <span class="o">=</span> <span class="n">MarketDataEngine</span><span class="p">(</span>
+        <span class="n">exchange_api</span><span class="o">=</span><span class="n">exchange_api</span><span class="p">,</span>
+        <span class="n">vol_engine</span><span class="o">=</span><span class="n">vol_engine</span><span class="p">,</span>
+        <span class="n">settings</span><span class="o">=</span><span class="n">settings</span><span class="p">,</span>
+        <span class="n">currency</span><span class="o">=</span><span class="n">currency</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="k">await</span> <span class="n">worker</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">interval_minutes</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span></div>
+
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">asyncio</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+
+
+<span class="c1"># get_option_data is currently run twice, once in _fetch_instruments and once in _process_currency_updates</span>
+<span class="c1"># this leads to a lot of redundant calls to the API and slows down the algorithm</span>
+<span class="c1"># instead it should call the api periodically and use a websocket to get the updates.</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2025, Mike Beckhusen.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

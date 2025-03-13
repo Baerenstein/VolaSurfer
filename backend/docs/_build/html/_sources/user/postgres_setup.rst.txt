@@ -1,5 +1,0 @@
-PostgreSQL Setup
-================
-
-# Replace the markdown include with the actual content converted to RST format
-# Copy the content from doc/postgres_setup.md and convert it to RST format

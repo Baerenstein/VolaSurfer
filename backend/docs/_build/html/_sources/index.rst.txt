@@ -4,31 +4,30 @@
    contain the root `toctree` directive.
 
 VolaSurfer Documentation
-========================
+=======================
 
 Welcome to VolaSurfer's documentation. This documentation covers both the technical implementation
 and usage guides for the project.
 
-User Guide
-----------
+Core Components
+-------------
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Core Components
+
+   core/MarketDataEngine
+   core/VolatilityEngine
+
+User Documentation
+----------------
 
 .. toctree::
    :maxdepth: 2
    :caption: User Guide
 
-   user/contributing
-   user/postgres_setup
-
-API Documentation
----------------
-
-.. toctree::
-   :maxdepth: 2
-   :caption: API Reference
-
-   api/core
-   api/server
-   api/infrastructure
+   other/contributing
+   other/postgres_setup
 
 Indices and tables
 ==================
