@@ -1,5 +1,5 @@
 Volatility Engine
-===============
+=================
 
 The VolatilityEngine class is responsible for managing volatility surface calculations and analysis for option markets.
 
@@ -9,10 +9,10 @@ The VolatilityEngine class is responsible for managing volatility surface calcul
    :show-inheritance:
 
 Core Components
--------------
+---------------
 
 Data Structures
-~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
 
 .. autoclass:: core.VolatilityEngine.VolPoints
    :members:
@@ -20,7 +20,7 @@ Data Structures
    :special-members: __init__, __str__
 
 Main Engine
-~~~~~~~~~~
+~~~~~~~~~~~
 
 .. autoclass:: core.VolatilityEngine.VolatilityEngine
    :members:
@@ -28,14 +28,14 @@ Main Engine
    :special-members: __init__
 
 Surface Calculations
-~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 .. automethod:: core.VolatilityEngine.VolatilityEngine.get_volatility_surface
 .. automethod:: core.VolatilityEngine.VolatilityEngine.get_skews
 .. automethod:: core.VolatilityEngine.VolatilityEngine._get_term_structure
 
 Analytics
-~~~~~~~~
+~~~~~~~~~
 
 .. automethod:: core.VolatilityEngine.VolatilityEngine.get_implied_volatility_index
 .. automethod:: core.VolatilityEngine.VolatilityEngine.get_surface_metrics

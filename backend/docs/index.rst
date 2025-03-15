@@ -4,13 +4,13 @@
    contain the root `toctree` directive.
 
 VolaSurfer Documentation
-=======================
+========================
 
 Welcome to VolaSurfer's documentation. This documentation covers both the technical implementation
 and usage guides for the project.
 
 Core Components
--------------
+---------------
 
 .. toctree::
    :maxdepth: 2
@@ -20,7 +20,7 @@ Core Components
    core/VolatilityEngine
 
 User Documentation
-----------------
+------------------
 
 .. toctree::
    :maxdepth: 2
