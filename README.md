@@ -87,6 +87,17 @@ Please ensure your PR:
 
 [see `contributing.md`](doc/contributing.md) for more details.
 
+## Documentation
+To generate sphinx docs locally, navigate to the backend directory and then run following:
+
+```bash
+cd docs
+make clean
+make html
+```
+
+Open the index.html file within your browser from backend/docs/_build/html/index.html after running the commands.
+
 ## License
 
 This project is licensed under the Apache-2.0 License - see the LICENSE file for details.
