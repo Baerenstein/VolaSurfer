@@ -5,22 +5,19 @@ on:
     branches:
       - feat/vol-models
 
+permissions:
+  contents: write
+
 jobs:
   get_data:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@master
-      - name: Generate diagram
+      - name: Update diagram
         uses: githubocto/repo-visualizer@main
         with:
           excluded_paths: |
             .github
             node_modules
-          output_file: "docs/diagram.svg"
-          artifact_name: "repo-diagram"
-      - name: Upload diagram
-        uses: actions/upload-artifact@v2
-        with:
-          name: repo-diagram
-          path: docs/diagram.svg
+          output_file: diagram.svg
