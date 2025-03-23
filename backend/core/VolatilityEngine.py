@@ -5,6 +5,17 @@ import pandas as pd
 from scipy.interpolate import griddata
 from collections import defaultdict
 from data.utils.data_schemas import VolatilityPoint, VolSurface
+from data.storage import StorageFactory
+from data.storage.base_store import BaseStore
+from infrastructure.settings import Settings
+
+
+# UPDATE
+
+# vol of vol calculation
+# different methods for historical volatility, f.e. EWMA, smoothed, etc.
+# check implied vol index calculation, appears to be wrong (had negative values in last run)
+# stoore metrics in db
 
 
 class VolPoints:
@@ -35,11 +46,15 @@ class VolatilityEngine:
         self,
         min_points: int = 10,
         length: int = 100,
+        # method: str = "",
+        settings: Settings = Settings(),  # store: str = 
     ):
         self.min_points = min_points
         self.length = length
         self.surfaces_data: Dict[datetime, VolPoints] = {}
-
+        self.settings = settings
+        
+        self.store = StorageFactory.create_storage(settings)
         # self.latest_surface: Optional[VolSurface] = None
     
     def add_market_data(
@@ -82,7 +97,7 @@ class VolatilityEngine:
         # Add the point to the corresponding VolPoints instance
         self.surfaces_data[timestamp].add_point(vol_point)
 
-    # VolSurface TODO: add option type parameter
+    # TODO: add option type parameter
     def get_volatility_surface(self, snapshot_id: str, asset_id: str) -> Optional[VolSurface]:
         """
         Create a VolSurface object containing implied volatilities with strikes and days to expiry.
@@ -331,3 +346,10 @@ class VolatilityEngine:
         if not self.surfaces_data:
             return None
         return self.surfaces_data[list(self.surfaces_data.keys())[-1]].vol_points[0].snapshot_id
+    
+class VolatilityStorage:
+    def __init__(self, store: BaseStore):
+        self.store = store
+
+    def store_surface(self, surface: VolSurface):
+        self.store.save_surface(surface)

@@ -98,6 +98,10 @@ make html
 
 Open the index.html file within your browser from backend/docs/_build/html/index.html after running the commands.
 
+# Current Codebase
+![Visualization of the codebase](./diagram.svg)
+
+
 ## License
 
 This project is licensed under the Apache-2.0 License - see the LICENSE file for details.
