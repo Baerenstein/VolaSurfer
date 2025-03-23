@@ -107,16 +107,6 @@ POSTGRES_URI=postgresql://VolaSurfer_user:secure_password@localhost:5432/options
 
 ## Additional Commands
 
-### List Databases
-```sql
-\l
-```
-
-### List Users
-```sql
-\du
-```
-
 ### Connect to a Database
 ```sql
 \c optionsdb

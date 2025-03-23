@@ -1,15 +1,15 @@
 from datetime import datetime
 import sys
 import os
-from typing import List, Optional
-from fastapi import FastAPI, HTTPException, Query
+from typing import List
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.encoders import jsonable_encoder
 from infrastructure.settings import Settings
 from data.storage import StorageFactory
 from data.utils.data_schemas import OptionContract
-from data.utils.surface_helper import interpolate_surface, InterpolationMethod
+from data.utils.surface_helper import interpolate_surface, SurfaceType
+import asyncio
 
 
 # Add the backend directory to the sys.path
@@ -79,8 +79,8 @@ async def get_options_chain(symbol: str) -> List[dict]:
 
 @app.get("/api/v1/latest-vol-surface")
 async def get_latest_vol_surface(
-    method: InterpolationMethod = Query(
-        InterpolationMethod.NEAREST,
+    method: SurfaceType = Query(
+        SurfaceType.NEAREST,
         description="Interpolation method to use: raw, cubic, or nearest"
     )
 ):
@@ -108,6 +108,39 @@ async def get_latest_vol_surface(
             detail=f"Error interpolating surface: {str(e)}"
         )
 
+
+
+@app.websocket("/api/v1/ws/latest-vol-surface")
+async def websocket_latest_vol_surface(websocket: WebSocket):
+    await websocket.accept()
+
+    params = websocket.query_params
+    method = params.get("method")  # Removed default value to make it truly dependent on the query
+
+    if method.upper() not in SurfaceType.__members__:
+        await websocket.send_json({"error": "Invalid interpolation method"})
+        await websocket.close()
+        return
+
+    method = SurfaceType.__members__[method.upper()]
+
+    client_connected = True
+    try:
+        while True:
+            # Here you would typically fetch the latest surface data
+            surface_data = store.get_latest_vol_surface()
+            interpolated_data = interpolate_surface(surface_data, method)
+            if surface_data is not None:
+                await websocket.send_json(interpolated_data)
+            await asyncio.sleep(5)  # Adjust the frequency of updates as needed
+    except WebSocketDisconnect:
+        print("Client disconnected")
+        client_connected = False
+    except Exception as e:
+        print(f"Error in WebSocket connection: {str(e)}")
+    finally:
+        if client_connected:
+            await websocket.close()
 
 @app.get("/health")
 async def health_check():

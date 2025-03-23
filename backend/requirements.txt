@@ -1,6 +1,6 @@
-pandas>=2.2.3,<3.0.0
+pandas==2.2.3
 fastapi>=0.115.6,<0.116.0
-uvicorn==0.34.0
+uvicorn[standard]==0.34.0
 requests>=2.32.3,<3.0.0
 pytest>=8.3.4,<9.0.0
 pytest-cov==6.0.0
@@ -13,3 +13,7 @@ ruff==0.9.2
 psycopg2==2.9.10
 # arcticdb==5.2.1
 sqlalchemy==2.0.37
+sphinx==8.2.3
+sphinx-rtd-theme==3.0.2
+sphinx-autodoc-typehints==3.1.0
+myst-parser==4.0.1
