@@ -63,9 +63,15 @@ Go to `backend/infrastructure/settings.py` and adjust POSTGRES_URI to your speci
 
 The frontend is built with React and Next.js.
 
-To run the frontend, navigate to the `frontend` directory and run:
+To build the frontend, navigate to the `frontend` directory and run:
 ```bash
 npm install
+npm run dev
+```
+
+After installing the frontend, the following command is sufficient for starting the dashabord:
+
+```bash
 npm run dev
 ```
 
