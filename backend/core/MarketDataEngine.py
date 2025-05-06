@@ -10,6 +10,7 @@ from core.VolatilityEngine import VolatilityEngine
 from data.storage import StorageFactory
 from infrastructure.utils.logging import setup_logger
 from data.utils.data_schemas import OptionContract, MarketState 
+from data.providers import Provider, DeribitProvider
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning, module="pandas")
@@ -46,7 +47,9 @@ class MarketDataEngine:
         settings: Settings = Settings(),
         currency: str = "ETH",
         asset_type: str = "crypto",
-        asset_id: int = 0
+        asset_id: int = 0,
+        store = None,
+        provider: Provider = None,
     ):
         self.settings = settings
         self.exchange_api = exchange_api
@@ -56,7 +59,10 @@ class MarketDataEngine:
         self.asset_id = asset_id
 
         self.max_retries = 1
-        self.store = StorageFactory.create_storage(settings)
+        self.store = store
+        if self.store is None:
+            self.store = StorageFactory.create_storage(self.settings)
+        self.provider = provider
         self.state = MarketState(
             last_update=datetime.now(), active_instruments=set(), last_price=float
         )
@@ -69,207 +75,15 @@ class MarketDataEngine:
         self.logger = setup_logger("market_data_worker")
         self.instruments_initialized = False
 
-    async def initialize_instruments(self):
-        """
-        Initialize the set of instruments to monitor.
+    
+    def _store_data(self, last_price, options_chain, vol_surface):
+        self.store.store_underlying(last_price, self.asset_type, self.currency)
+        print(f"{datetime.now()}: Underlying data stored successfully\n")
+        print(f"{datetime.now()}: Storing options chain\n")
+        self.store.store_options_chain(options_chain)
+        self.store.store_surface(vol_surface)
 
-        This method:
-        - Fetches the current price of the underlying asset
-        - Retrieves available options from the exchange
-        - Filters options based on expiry and moneyness criteria
-        - Updates the active instruments set
-
-        Returns:
-            None
-        """
-        current_time = datetime.now()
-        self.asset_id = self.store.get_or_create_asset(self.asset_type, self.currency)
-
-        # add time check for when was the last time
-        if self.instruments_initialized:
-            self.logger.info("Instruments have already been initialized.")
-            return
-
-        current_price = await self.get_last_price()
-        instruments = self.exchange_api.get_options(self.currency)
-
-        # this below should be optimised
-        filtered = []
-        for inst in instruments.get("options", []):
-            option_data = self.exchange_api.get_option_data(inst["instrument_name"])
-            if not option_data or not option_data["last_price"] > 0:
-                continue
-            parts = inst["instrument_name"].split("-")
-            if len(parts) < 4:
-                continue
-            try:
-                expiry_date = datetime.strptime(parts[1], "%d%b%y")
-                days_to_expiry = (expiry_date.date() - current_time.date()).days
-                strike = float(parts[2])
-                moneyness = strike / current_price
-                if (
-                    self.min_expiry_days <= days_to_expiry <= self.max_expiry_days
-                    and self.min_moneyness <= moneyness <= self.max_moneyness
-                ):
-                    filtered.append(inst)
-            except (ValueError, IndexError) as e:
-                self.logger.warning(
-                    f"Error parsing instrument {inst['instrument_name']}: {e}"
-                )
-                continue
-        
-        if filtered:
-            self.state.active_instruments.update(
-                symbol["instrument_name"] for symbol in filtered
-            )
-            self.logger.info(
-                f"Added {len(filtered)} filtered instruments for {self.currency}"
-            )
-            self.instruments_initialized = True
-          
-    async def process_market_updates(self):
-        """
-        Process market updates for all active instruments.
-
-        This method coordinates the main data collection and processing cycle:
-        - Checks market state
-        - Processes currency updates
-        - Updates last update timestamp
-        - Handles any errors that occur during processing
-
-        Returns:
-            None
-
-        Raises:
-            Exception: If any error occurs during processing
-        """
-        self.logger.info(f"{datetime.now()}: Starting market data processing...")
-
-        try:
-            # if not self._check_market_state():
-            #     await asyncio.sleep(60)
-
-            await self._process_currency_updates()
-
-            self.state.last_update = datetime.now()
-            self.state.error_count = 0
-            print(f"{datetime.now()}: Last update: {self.state.last_update}\n")
-
-        except Exception as e:
-            await self._handle_error(e)
-
-    async def _process_currency_updates(self):
-        """
-        Process updates for the current currency.
-
-        This method:
-        - Fetches the current price
-        - Gets the options chain
-        - Calculates the volatility surface
-        - Stores the collected and calculated data
-
-        Returns:
-            None
-        """
-        print(f"{datetime.now()}: Starting to process currency updates\n")
-        last_price = await self.get_last_price()
-        print("fetched current price, next up options chain")
-        options_chain = self._get_options_chain()
-        print("options chain retrieved successfully, lets get wavy!")
-        surface = self._get_vol_surface(options_chain)
-        print("... almost done, surfaces are about to be surfed")
-        self._store_data(last_price, options_chain, surface)
-   
-    async def get_last_price(self) -> float:
-        """
-        Fetch the current price of the underlying asset.
-
-        Returns:
-            float: The current price of the underlying asset
-
-        Raises:
-            ValueError: If unable to get the current price
-        """
-        print("GETTING LAST PRICE")
-        try:
-            current_price = self.exchange_api.get_last_price(self.currency)
-            if not current_price:
-                raise ValueError(f"Could not get price for {self.currency}")
-
-            self.state.last_price = current_price
-            print(f"{datetime.now()}: Last price: {self.state.last_price}")
-            return current_price
-
-        except Exception as e:
-            self.logger.error(f"Error getting last price for {self.currency}: {e}")
-            return None
-  
-    def _get_options_chain(self):
-        """
-        Collect and process options chain data for active instruments.
-
-        Returns:
-            pd.DataFrame: DataFrame containing options chain data with columns:
-                - timestamp: Time of data collection
-                - symbol: Option instrument identifier
-                - strike: Strike price
-                - expiry_date: Option expiration date
-                - option_type: Put or Call
-                - last_price: Last traded price
-                - implied_vol: Implied volatility
-                - greeks: Delta, Gamma, Vega, Theta
-                - other market data
-        """
-        print("GETTING OPTIONS CHAIN")
-        current_time = datetime.now()
-        data_points = []
-        for symbol in self.state.active_instruments:
-            if self.currency in symbol:
-                option_data = self.exchange_api.get_option_data(symbol)
-                if option_data is None:
-                    raise LookupError(f"No option data found for symbol: {symbol}")
-
-                parts = symbol.split("-")
-                if len(parts) < 4:
-                    raise ValueError(f"Invalid symbol format: {symbol}")
-                expiry_date = datetime.strptime(parts[1], "%d%b%y")
-                days_to_expiry = (expiry_date.date() - current_time.date()).days
-                strike = float(parts[2])
-                price = self.state.last_price
-                moneyness = strike / price if price else None
-
-                option = OptionContract(
-                    timestamp=current_time,
-                    asset_id=self.asset_id,
-                    base_currency=self.currency,
-                    symbol=symbol,
-                    expiry_date=expiry_date,
-                    days_to_expiry=days_to_expiry,
-                    strike=strike,
-                    moneyness=moneyness,
-                    option_type=parts[3].lower(),
-                    last_price=option_data.get("last_price", 0),
-                    implied_vol=option_data.get("implied_vol", 0),
-                    bid_price=option_data.get("bid_price"),
-                    ask_price=option_data.get("ask_price"),
-                    delta=option_data.get("delta"),
-                    gamma=option_data.get("gamma"),
-                    vega=option_data.get("vega"),
-                    theta=option_data.get("theta"),
-                    open_interest=option_data.get("open_interest"),
-                    snapshot_id=current_time.isoformat(), # change snapshot id method
-                )
-
-                data_points.append(option)
-                options_dicts = [vars(option) for option in data_points]
-                options_chain = pd.DataFrame(options_dicts)
-                options_chain["bid_price"].fillna(0, inplace=True)
-                options_chain["ask_price"].fillna(0, inplace=True)
-                options_chain["open_interest"].fillna(0, inplace=True)
-
-        return options_chain
-
-    def _get_vol_surface(self, option_chain):
+    def _get_vol_surface(self, option_chain, asset_id):
         """
         Generate the volatility surface from options chain data.
 
@@ -299,7 +113,7 @@ class MarketDataEngine:
                 vega=row.vega,
                 theta=row.theta,
                 snapshot_id=row.snapshot_id,
-                asset_id=self.asset_id,
+                asset_id=asset_id,
             )
 
         print(f"All options processed, generating surface...")
@@ -307,7 +121,7 @@ class MarketDataEngine:
         # snapshot_id = datetime.now().isoformat()
         # print(f"Using snapshot_id: {snapshot_id}")
         snapshot_id = self.vol_engine.get_latest_snapshot_id()
-        vol_surface = self.vol_engine.get_volatility_surface(snapshot_id, self.asset_id)
+        vol_surface = self.vol_engine.get_volatility_surface(snapshot_id, asset_id)
         print(f"Vol surface generated: {vol_surface is not None}")
         if vol_surface:
             print(f"Surface contains {len(vol_surface.strikes)} points")
@@ -327,26 +141,25 @@ class MarketDataEngine:
         print(f"Surface metrics generated: {surface_metrics}")
 
         return vol_surface
+   
+    async def process_market_updates(self):
+        """Processing loop for market updates"""
+        self.logger.info(f"{datetime.now()}: Starting market data processing...")
 
-    def _store_data(self, last_price, options_chain, vol_surface):
-        """
-        Store collected and calculated market data.
+        try:
+            # if not self._check_market_state():
+            #     await asyncio.sleep(60)
 
-        Args:
-            last_price (float): Current price of the underlying
-            options_chain (pd.DataFrame): Options chain data
-            vol_surface (VolatilitySurface): Calculated volatility surface
+            options_data = await self.provider.process_currency_updates()
+            surface = self._get_vol_surface(options_data["chain"], options_data["asset_id"])
+            print("... almost done, surfaces are about to be surfed")
+            self._store_data(options_data["last_price"], options_data["chain"], surface)
+            self.state.last_update = datetime.now()
+            self.state.error_count = 0
+            print(f"{datetime.now()}: Last update: {self.state.last_update}\n")
 
-        Returns:
-            None
-        """
-        print("STORING DATA")
-        self.store.store_underlying(last_price, self.asset_type, self.currency)
-        print(f"{datetime.now()}: Underlying data stored successfully\n")
-
-        print(f"{datetime.now()}: Storing options chain\n")
-        self.store.store_options_chain(options_chain)
-        self.store.store_surface(vol_surface)
+        except Exception as e:
+            await self._handle_error(e)
 
     def _check_market_state(self) -> bool:
         """Check if market is in normal operating state"""
@@ -392,7 +205,7 @@ class MarketDataEngine:
 
         # Initialize instruments once at startup
         # TODO should be called only once per day
-        await self.initialize_instruments()
+        await self.provider.initialize_instruments()
 
         while True:
             try:
@@ -426,8 +239,9 @@ class MarketDataEngine:
 
 async def main():
     settings = Settings()
-
+    store = StorageFactory.create_storage(settings)
     exchange_api = DeribitAPI()
+    provider = DeribitProvider(currency="BTC", store=store)
     vol_engine = VolatilityEngine()
     currency = "BTC"
 
@@ -436,6 +250,8 @@ async def main():
         vol_engine=vol_engine,
         settings=settings,
         currency=currency,
+        store=store,
+        provider=provider,
     )
 
     await worker.run(interval_minutes=2)
