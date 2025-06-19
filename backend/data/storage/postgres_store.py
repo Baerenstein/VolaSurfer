@@ -198,9 +198,9 @@ class PostgresStore(BaseStore):
 
     def store_underlying(self, last_price: float, asset_type: str, symbol: str):
         """Store underlying asset data"""
-        asset_type = self.get_or_create_asset(asset_type, symbol)
+        asset_id = self.get_or_create_asset(asset_type, symbol)
         underlying_df = pd.DataFrame(
-            {"asset_id": [asset_type], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
+            {"asset_id": [asset_id], 'symbol': [symbol], "price": [last_price], "timestamp": [datetime.now()]}
         )
         with self.conn.cursor() as cursor:
             for _, row in underlying_df.iterrows():

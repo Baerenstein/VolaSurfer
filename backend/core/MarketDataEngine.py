@@ -187,7 +187,7 @@ class MarketDataEngine:
         Raises:
             ValueError: If unable to get the current price
         """
-        print("GETTING LAST PRICE")
+        # print("GETTING LAST PRICE")
         try:
             current_price = self.exchange_api.get_last_price(self.currency)
             if not current_price:
@@ -277,9 +277,9 @@ class MarketDataEngine:
             VolatilitySurface: Object containing the calculated volatility surface,
                               including term structure and skew information
         """
-        print("GETTING VOL SURFACE")
-        print(f"Option chain type: {type(option_chain)}")
-        print(f"Option chain length: {len(option_chain) if option_chain is not None else 'None'}")
+        # print("GETTING VOL SURFACE")
+        # print(f"Option chain type: {type(option_chain)}")
+        # print(f"Option chain length: {len(option_chain) if option_chain is not None else 'None'}")
         
         for row in option_chain.itertuples():
             # print(f"Processing option: {row.symbol}")
@@ -299,51 +299,31 @@ class MarketDataEngine:
                 asset_id=self.asset_id,
             )
 
-        print(f"All options processed, generating surface...")
+        # print(f"All options processed, generating surface...")
         
         # snapshot_id = datetime.now().isoformat()
         # print(f"Using snapshot_id: {snapshot_id}")
         snapshot_id = self.vol_engine.get_latest_snapshot_id()
         vol_surface = self.vol_engine.get_volatility_surface(snapshot_id, self.asset_id)
-        print(f"Vol surface generated: {vol_surface is not None}")
-        if vol_surface:
-            print(f"Surface contains {len(vol_surface.strikes)} points")
+        # print(f"Vol surface generated: {vol_surface is not None}")
+        # if vol_surface:
+        #     print(f"Surface contains {len(vol_surface.strikes)} points")
 
-        skews = self.vol_engine.get_skews(vol_surface)
-        print(f"Skew generated: {skews is not None}")
-        print(f"Skew contains {skews}")
+        # skews = self.vol_engine.get_skews(vol_surface)
+        # print(f"Skew generated: {skews is not None}")
+        # print(f"Skew contains {skews}")
 
-        term_structure = self.vol_engine._get_term_structure(vol_surface)
-        # Convert numpy types to simple numbers for cleaner output
-        if term_structure:
-            clean_term_structure = {}
-            for key, value in term_structure.items():
-                if isinstance(value, list):
-                    clean_term_structure[key] = [float(x) if hasattr(x, 'item') else x for x in value]
-                else:
-                    clean_term_structure[key] = float(value) if hasattr(value, 'item') else value
-            print(f"Term structure contains {clean_term_structure}")
-        else:
-            print(f"Term structure contains {term_structure}")
+        # term_structure = self.vol_engine._get_term_structure(vol_surface)
+        # print(f"Term structure generated: {term_structure is not None}")
+        # print(f"Term structure contains {term_structure}")
 
         # # get implied volatility index
-        implied_volatility_index = self.vol_engine.get_implied_volatility_index(vol_surface)
-        print(f"Implied volatility index generated: {implied_volatility_index}")
+        # implied_volatility_index = self.vol_engine.get_implied_volatility_index(vol_surface)
+        # print(f"Implied volatility index generated: {implied_volatility_index}")
 
-        surface_metrics = self.vol_engine.get_surface_metrics(vol_surface)
-        # Convert numpy types to simple numbers for cleaner output
-        if surface_metrics:
-            clean_surface_metrics = {}
-            for key, value in surface_metrics.items():
-                if isinstance(value, (int, float)) and hasattr(value, 'item'):
-                    clean_surface_metrics[key] = float(value)
-                elif isinstance(value, datetime):
-                    clean_surface_metrics[key] = value.isoformat()
-                else:
-                    clean_surface_metrics[key] = value
-            print(f"Surface metrics generated: {clean_surface_metrics}")
-        else:
-            print(f"Surface metrics generated: {surface_metrics}")
+        # surface_metrics = self.vol_engine.get_surface_metrics(vol_surface)
+        # print(f"Surface metrics generated: {surface_metrics is not None}")
+        # print(f"Surface metrics contains {surface_metrics}")
 
         return vol_surface
 

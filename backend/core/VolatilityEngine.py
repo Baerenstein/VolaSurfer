@@ -37,7 +37,7 @@ class VolatilityEngine:
         length: int = 100,
     ):
         self.min_points = min_points
-        self.length = length
+        self.length = length #TODO currently not used. should limit the number of surfaces stored in the dict
         self.surfaces_data: Dict[datetime, VolPoints] = {}
 
         # self.latest_surface: Optional[VolSurface] = None
@@ -91,21 +91,21 @@ class VolatilityEngine:
         :param asset_id: The asset_id to create the VolSurface from.
         :return: A VolSurface object representing the volatility surface
         """
-        print(f"Getting volatility surface for snapshot_id: {snapshot_id}")
-        print(f"Number of surfaces in data: {len(self.surfaces_data)}")
+        # print(f"Getting volatility surface for snapshot_id: {snapshot_id}")
+        # print(f"Number of surfaces in data: {len(self.surfaces_data)}")
         
         filtered_vol_points = []
         for timestamp, vol_points in self.surfaces_data.items():
-            print(f"Processing timestamp {timestamp} with {len(vol_points.vol_points)} points")
+            # print(f"Processing timestamp {timestamp} with {len(vol_points.vol_points)} points")
             matching_points = [
                 point
                 for point in vol_points.vol_points
                 if point.snapshot_id == snapshot_id
             ]
-            print(f"Found {len(matching_points)} matching points for this timestamp")
+            # print(f"Found {len(matching_points)} matching points for this timestamp")
             filtered_vol_points.extend(matching_points)
 
-        print(f"Total filtered points: {len(filtered_vol_points)}")
+        # print(f"Total filtered points: {len(filtered_vol_points)}")
         
         if not filtered_vol_points:
             print("WARNING: No points found for this snapshot_id")
@@ -123,6 +123,7 @@ class VolatilityEngine:
         days_to_expiry = [point.days_to_expiry for point in filtered_vol_points]
         implied_vols = [point.implied_vol for point in filtered_vol_points]
         option_types = [point.option_type for point in filtered_vol_points]
+
 
         print("Data ranges:")
         print(f"Strikes: {min(strikes)} to {max(strikes)}")
@@ -199,7 +200,6 @@ class VolatilityEngine:
         :param surface: VolSurface object containing the volatility surface data
         :return: A DataFrame containing the term structure data or None if insufficient data.
         """
-        print("Calculating term structure.")
         if not surface:
             return None
 
@@ -219,8 +219,6 @@ class VolatilityEngine:
             term_data["days_to_expiry"].append(dte)
             term_data["atm_vol"].append(np.mean(vols))
             
-        print(f"{datetime.now()}: Term data: {term_data}.")
-
         return pd.DataFrame(term_data)
 
     def get_implied_volatility_index(self, surface: VolSurface, target_expiry_days: int = 30) -> float:
