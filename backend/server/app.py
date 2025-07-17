@@ -1,7 +1,7 @@
 from datetime import datetime
 import sys
 import os
-from typing import List
+from typing import List, Optional
 from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -148,7 +148,11 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
             await websocket.close()
 
 @app.get("/api/v1/vol_surface/history")
-async def get_vol_surface_history(limit: int = Query(100, description="Number of surfaces to retrieve")) -> List[dict]:
+async def get_vol_surface_history(
+    limit: int = Query(100, description="Number of surfaces to retrieve"),
+    min_dte: Optional[int] = Query(None, description="Minimum days to expiry"),
+    max_dte: Optional[int] = Query(None, description="Maximum days to expiry")
+) -> List[dict]:
     """
     Retrieve the last N volatility surfaces ordered by timestamp descending.
     """
@@ -157,11 +161,13 @@ async def get_vol_surface_history(limit: int = Query(100, description="Number of
             logging.error("Limit must be a positive integer")
             raise HTTPException(status_code=422, detail="Limit must be a positive integer")
 
-        logging.info(f"Fetching last {limit} volatility surfaces")
-        surfaces = store.get_last_n_surfaces(limit)
+        logging.info(f"Fetching last {limit} volatility surfaces with DTE filter: {min_dte}-{max_dte}")
+        surfaces = store.get_last_n_surfaces(limit, min_dte=min_dte, max_dte=max_dte)
+        
         if len(surfaces) == 0:
             logging.warning("No volatility surfaces found")
             return JSONResponse(status_code=404, content={"detail": "No volatility surfaces found"})
+            
         # Convert all Decimal objects to float for JSON serialization
         def convert_decimal_to_float(data):
             if isinstance(data, list):

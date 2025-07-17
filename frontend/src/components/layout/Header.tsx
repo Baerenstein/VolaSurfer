@@ -21,12 +21,18 @@ const Header: React.FC<HeaderProps> = ({ onPageChange, currentPage }) => {
             onClick={() => onPageChange('surface')}
             className={`px-3 py-2 rounded ${currentPage === 'surface' ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
           >
-            VolaSurfer
+            Live Surface
+          </button>
+          <button
+            onClick={() => onPageChange('history')}
+            className={`px-3 py-2 rounded ${currentPage === 'history' ? 'bg-gray-700' : 'hover:bg-gray-700'}`}
+          >
+            History
           </button>
         </nav>
       </div>
     </header>
   );
-}
+};
 
 export default Header;

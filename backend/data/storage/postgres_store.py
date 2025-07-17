@@ -434,62 +434,109 @@ class PostgresStore(BaseStore):
                 "implied_vols": implied_vols
             }
 
-    def get_last_n_surfaces(self, limit: int = 100) -> List[VolSurface]:
+    def get_last_n_surfaces(self, limit: int = 100, min_dte: Optional[int] = None, max_dte: Optional[int] = None) -> List[VolSurface]:
         """
         Retrieve the last N volatility surfaces ordered by timestamp descending.
-
+        
         Args:
             limit: Number of surfaces to retrieve
-
-        Returns:
-            List of VolSurface objects
+            min_dte: Minimum days to expiry filter
+            max_dte: Maximum days to expiry filter
         """
-        query = """
-        SELECT s.id, s.timestamp, s.method, s.snapshot_id, sp.strike, sp.moneyness, sp.maturity, 
-               sp.days_to_expiry, sp.implied_vol, sp.option_type
+        # First, get the surface IDs we want (applying the limit to surfaces, not points)
+        surface_query = """
+        SELECT DISTINCT s.id, s.timestamp, s.method, s.snapshot_id, s.asset_id
         FROM surfaces s
-        JOIN surface_points sp ON s.id = sp.surface_id
-        ORDER BY s.timestamp DESC
-        LIMIT %s
         """
+        
+        surface_params = []
+        where_conditions = []
+        
+        # Add DTE filtering by checking if surface has points in the DTE range
+        if min_dte is not None or max_dte is not None:
+            surface_query += " JOIN surface_points sp ON s.id = sp.surface_id "
+            
+            if min_dte is not None:
+                where_conditions.append("sp.days_to_expiry >= %s")
+                surface_params.append(min_dte)
+                
+            if max_dte is not None:
+                where_conditions.append("sp.days_to_expiry <= %s")
+                surface_params.append(max_dte)
+        
+        if where_conditions:
+            surface_query += " WHERE " + " AND ".join(where_conditions)
+        
+        surface_query += " ORDER BY s.timestamp DESC LIMIT %s"
+        surface_params.append(limit)
+        
         with self.conn.cursor() as cur:
-            cur.execute(query, (limit,))
-            rows = cur.fetchall()
+            # Get the surface metadata
+            cur.execute(surface_query, surface_params)
+            surface_rows = cur.fetchall()
+            
+            if not surface_rows:
+                return []
+            
+            # Extract surface IDs
+            surface_ids = [row[0] for row in surface_rows]
+            surface_metadata = {row[0]: (row[1], row[2], row[3], row[4]) for row in surface_rows}  # id -> (timestamp, method, snapshot_id, asset_id)
+            
+            # Now get ALL points for these surfaces
+            points_query = """
+            SELECT surface_id, strike, moneyness, maturity, days_to_expiry, implied_vol, option_type
+            FROM surface_points 
+            WHERE surface_id = ANY(%s)
+            ORDER BY surface_id, days_to_expiry, moneyness
+            """
+            
+            cur.execute(points_query, (surface_ids,))
+            points_rows = cur.fetchall()
 
+        # Group points by surface
         surfaces = []
-        current_surface_id = None
-        current_surface = None
-
-        for row in rows:
-            surface_id, timestamp, method, snapshot_id, strike, moneyness, maturity, dte, implied_vol, option_type = row
-
-            if surface_id != current_surface_id:
-                if current_surface:
-                    surfaces.append(current_surface)
-
-                current_surface = VolSurface(
+        surface_points = {}
+        
+        for row in points_rows:
+            surface_id, strike, moneyness, maturity, dte, implied_vol, option_type = row
+            
+            if surface_id not in surface_points:
+                surface_points[surface_id] = {
+                    'strikes': [],
+                    'moneyness': [],
+                    'maturities': [],
+                    'days_to_expiry': [],
+                    'implied_vols': [],
+                    'option_type': []
+                }
+            
+            surface_points[surface_id]['strikes'].append(strike)
+            surface_points[surface_id]['moneyness'].append(moneyness)
+            surface_points[surface_id]['maturities'].append(maturity)
+            surface_points[surface_id]['days_to_expiry'].append(dte)
+            surface_points[surface_id]['implied_vols'].append(implied_vol)
+            surface_points[surface_id]['option_type'].append(option_type)
+        
+        # Create VolSurface objects
+        for surface_id in surface_ids:
+            if surface_id in surface_points:
+                timestamp, method, snapshot_id, asset_id = surface_metadata[surface_id]
+                points = surface_points[surface_id]
+                
+                surface = VolSurface(
                     timestamp=timestamp,
                     method=method,
                     snapshot_id=snapshot_id,
-                    strikes=[],
-                    moneyness=[],
-                    maturities=[],
-                    days_to_expiry=[],
-                    implied_vols=[],
-                    option_type=[]
+                    asset_id=asset_id,
+                    strikes=points['strikes'],
+                    moneyness=points['moneyness'],
+                    maturities=points['maturities'],
+                    days_to_expiry=points['days_to_expiry'],
+                    implied_vols=points['implied_vols'],
+                    option_type=points['option_type']
                 )
-                current_surface_id = surface_id
-
-            current_surface.strikes.append(strike)
-            current_surface.moneyness.append(moneyness)
-            current_surface.maturities.append(maturity)
-            current_surface.days_to_expiry.append(dte)
-            current_surface.implied_vols.append(implied_vol)
-            current_surface.option_type.append(option_type)
-
-        if current_surface:
-            surfaces.append(current_surface)
-
+                surfaces.append(surface)
+        
         return surfaces
 
     def get_or_create_asset(self, asset_type: str, ticker: str) -> int:
