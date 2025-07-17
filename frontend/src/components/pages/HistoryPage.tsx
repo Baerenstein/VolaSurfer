@@ -18,11 +18,13 @@ const Container: React.FC<ContainerProps> = ({ title, children }) => (
 );
 
 const HistoryPage: React.FC = () => {
-  const [limit, setLimit] = useState(100);
+  const [limit, setLimit] = useState(500); // Changed from 100 to 500
   const [selectedSurfaceIndex, setSelectedSurfaceIndex] = useState<number>(0);
   const [showWireframe, setShowWireframe] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1000); // milliseconds between frames
+  const [playbackSpeed, setPlaybackSpeed] = useState(1000);
+  const [interpolationDensity, setInterpolationDensity] = useState(20); // New interpolation control
+  const [isLoadingLargeDataset, setIsLoadingLargeDataset] = useState(false);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
   const { data, isLoading, error, refetch } = useSurfaceHistory({ limit });
@@ -32,19 +34,17 @@ const HistoryPage: React.FC = () => {
     return data[selectedSurfaceIndex] || data[0];
   }, [data, selectedSurfaceIndex]);
 
-  // Playback controls
+  // Playback controls - FIXED to play chronologically (oldest to newest)
   const startPlayback = () => {
     if (!data || data.length === 0) return;
     
     setIsPlaying(true);
     intervalRef.current = setInterval(() => {
       setSelectedSurfaceIndex(prevIndex => {
-        const nextIndex = prevIndex + 1;
-        if (nextIndex >= data.length) {
-          // Stop at the end or loop back to beginning
+        const nextIndex = prevIndex - 1; // Changed from +1 to -1 (going backward through the array = forward in time)
+        if (nextIndex < 0) { // Changed from >= data.length to < 0
           setIsPlaying(false);
-          return 0; // Loop back to start
-          // return prevIndex; // Stop at end
+          return data.length - 1; // Loop back to end (oldest surface)
         }
         return nextIndex;
       });
@@ -59,28 +59,24 @@ const HistoryPage: React.FC = () => {
     }
   };
 
+  const stepForward = () => {
+    stopPlayback();
+    setSelectedSurfaceIndex(prev => Math.max(prev - 1, 0)); // Changed: going backward in array = forward in time
+  };
+
+  const stepBackward = () => {
+    stopPlayback();
+    setSelectedSurfaceIndex(prev => Math.min(prev + 1, (data?.length || 1) - 1)); // Changed: going forward in array = backward in time
+  };
+
   const resetToStart = () => {
     stopPlayback();
-    setSelectedSurfaceIndex(0);
+    setSelectedSurfaceIndex((data?.length || 1) - 1); // Changed: start at oldest (last index)
   };
 
   const goToEnd = () => {
     stopPlayback();
-    if (data && data.length > 0) {
-      setSelectedSurfaceIndex(data.length - 1);
-    }
-  };
-
-  const stepForward = () => {
-    if (data && selectedSurfaceIndex < data.length - 1) {
-      setSelectedSurfaceIndex(prev => prev + 1);
-    }
-  };
-
-  const stepBackward = () => {
-    if (selectedSurfaceIndex > 0) {
-      setSelectedSurfaceIndex(prev => prev - 1);
-    }
+    setSelectedSurfaceIndex(0); // Changed: end at newest (first index)
   };
 
   // Cleanup interval on unmount
@@ -92,19 +88,37 @@ const HistoryPage: React.FC = () => {
     };
   }, []);
 
-  // Stop playback when reaching the end
+  // Auto-update playback interval when speed changes
   useEffect(() => {
-    if (data && selectedSurfaceIndex >= data.length - 1 && isPlaying) {
+    if (isPlaying && intervalRef.current) {
+      // Just update the existing interval without stopping/starting
+      clearInterval(intervalRef.current);
+      intervalRef.current = setInterval(() => {
+        setSelectedSurfaceIndex(prevIndex => {
+          const nextIndex = prevIndex - 1;
+          if (nextIndex < 0) {
+            setIsPlaying(false);
+            return data?.length ? data.length - 1 : 0;
+          }
+          return nextIndex;
+        });
+      }, playbackSpeed);
+    }
+  }, [playbackSpeed, data]);
+
+  // Stop playback when we reach the end (newest surface at index 0)
+  useEffect(() => {
+    if (isPlaying && data && selectedSurfaceIndex <= 0) {
       stopPlayback();
     }
   }, [selectedSurfaceIndex, data, isPlaying]);
 
+  // Enhanced plot data with better interpolation
   const plotData = useMemo(() => {
     if (!selectedSurface) return [];
     
     console.log(`Processing surface ${selectedSurfaceIndex + 1}/${data?.length || 0}:`, selectedSurface);
     
-    // Check if we have the required data
     if (!selectedSurface.moneyness || !selectedSurface.daysToExpiry || !selectedSurface.impliedVols) {
       console.warn('Missing required data for plotting');
       return [];
@@ -127,29 +141,57 @@ const HistoryPage: React.FC = () => {
       totalDataPoints: selectedSurface.impliedVols.length
     });
     
-    // Handle flat array from backend (VolSurface.to_dict())
-    if (Array.isArray(selectedSurface.impliedVols) && 
-        !Array.isArray(selectedSurface.impliedVols[0])) {
+    if (Array.isArray(selectedSurface.impliedVols) && !Array.isArray(selectedSurface.impliedVols[0])) {
       
-      // Create a matrix organized by [days_to_expiry][moneyness]
+      // Create interpolated grid for smoother surface
+      const moneynessMin = Math.min(...uniqueMoneyness);
+      const moneynessMax = Math.max(...uniqueMoneyness);
+      const dteMin = Math.min(...uniqueDaysToExpiry);
+      const dteMax = Math.max(...uniqueDaysToExpiry);
+      
+      // Create denser grid for smoother interpolation
+      const gridMoneyness = Array.from({length: interpolationDensity}, (_, i) => 
+        moneynessMin + (moneynessMax - moneynessMin) * i / (interpolationDensity - 1)
+      );
+      const gridDTE = Array.from({length: Math.max(interpolationDensity, uniqueDaysToExpiry.length)}, (_, i) => 
+        dteMin + (dteMax - dteMin) * i / (Math.max(interpolationDensity, uniqueDaysToExpiry.length) - 1)
+      );
+      
+      // Create matrix with bilinear interpolation
       const matrix: number[][] = [];
       
-      // Initialize matrix with NaN values
-      for (let i = 0; i < uniqueDaysToExpiry.length; i++) {
-        matrix[i] = new Array(uniqueMoneyness.length).fill(NaN);
-      }
-      
-      // Fill matrix with actual values
-      for (let i = 0; i < selectedSurface.impliedVols.length; i++) {
-        const moneyness = selectedSurface.moneyness[i];
-        const dte = selectedSurface.daysToExpiry[i];
-        const vol = selectedSurface.impliedVols[i];
+      for (let dteIdx = 0; dteIdx < gridDTE.length; dteIdx++) {
+        const currentDTE = gridDTE[dteIdx];
+        matrix[dteIdx] = [];
         
-        const dteIndex = uniqueDaysToExpiry.indexOf(dte);
-        const moneynessIndex = uniqueMoneyness.indexOf(moneyness);
-        
-        if (dteIndex >= 0 && moneynessIndex >= 0 && typeof vol === 'number' && !isNaN(vol)) {
-          matrix[dteIndex][moneynessIndex] = vol / 100; // Convert percentage to decimal
+        for (let mIdx = 0; mIdx < gridMoneyness.length; mIdx++) {
+          const currentMoneyness = gridMoneyness[mIdx];
+          
+          // Find the interpolated value at this grid point
+          let interpolatedValue = NaN;
+          
+          // Simple nearest neighbor for now, could enhance with bilinear interpolation
+          let minDistance = Infinity;
+          for (let i = 0; i < selectedSurface.impliedVols.length; i++) {
+            const dataMoneyness = selectedSurface.moneyness[i];
+            const dataDTE = selectedSurface.daysToExpiry[i];
+            const dataVol = selectedSurface.impliedVols[i];
+            
+            if (typeof dataVol === 'number' && !isNaN(dataVol)) {
+              const distance = Math.sqrt(
+                Math.pow((currentMoneyness - dataMoneyness) / (moneynessMax - moneynessMin), 2) +
+                Math.pow((currentDTE - dataDTE) / (dteMax - dteMin), 2)
+              );
+              
+              if (distance < minDistance) {
+                minDistance = distance;
+                interpolatedValue = dataVol / 100; // Convert percentage to decimal
+              }
+            }
+          }
+          
+          // Only include values that are reasonably close
+          matrix[dteIdx][mIdx] = minDistance < 0.3 ? interpolatedValue : NaN;
         }
       }
       
@@ -168,12 +210,11 @@ const HistoryPage: React.FC = () => {
       
       return [{
         type: 'surface' as const,
-        x: uniqueMoneyness,
-        y: uniqueDaysToExpiry,
+        x: gridMoneyness,
+        y: gridDTE,
         z: validMatrix,
         showscale: true,
         colorscale: "Viridis",
-        // Add explicit color range for better visualization
         cmin: minVal,
         cmax: maxVal,
         contours: {
@@ -184,62 +225,73 @@ const HistoryPage: React.FC = () => {
             project: { z: true },
           },
         },
-        // Add wireframe option for debugging
+        // Enhanced surface properties for smoother rendering
+        surfacecolor: validMatrix,
+        opacity: showWireframe ? 0.7 : 0.9,
+        lighting: {
+          ambient: 0.4,
+          diffuse: 0.6,
+          fresnel: 0.2,
+          specular: 0.05,
+          roughness: 0.1,
+        },
+        lightposition: {
+          x: 100,
+          y: 200,
+          z: 0
+        },
+        hoverongaps: false,
+        hoverlabel: {
+          bgcolor: 'rgba(0,0,0,0.8)',
+          bordercolor: 'white',
+          font: { color: 'white', size: 12 }
+        },
+        hovertemplate: 
+          '<b>Moneyness:</b> %{x:.3f}<br>' +
+          '<b>Days to Expiry:</b> %{y:.1f}<br>' +
+          '<b>Implied Vol:</b> %{z:.2%}<br>' +
+          '<extra></extra>',
         ...(showWireframe && {
-          surfacecolor: validMatrix,
-          showscale: false,
-          opacity: 0.7,
           contours: {
             x: { show: true, color: "white", width: 2 },
             y: { show: true, color: "white", width: 2 },
             z: { show: true, color: "white", width: 2 },
           }
         }),
-        opacity: showWireframe ? 0.7 : 1,
-        hoverongaps: false,
-        hoverlabel: {
-          bgcolor: "#FFF",
-          font: { color: "#000" },
-        },
-        hovertemplate: 'Moneyness: %{x:.3f}<br>Days to Expiry: %{y:.0f}<br>Implied Vol: %{z:.2%}<extra></extra>',
       }];
     }
     
     return [];
-  }, [selectedSurface, showWireframe, selectedSurfaceIndex, data]);
+  }, [selectedSurface, showWireframe, interpolationDensity]);
 
   const layout = useMemo(() => ({
     title: {
-      text: `Historical Volatility Surface - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''} (${selectedSurfaceIndex + 1}/${data?.length || 0})`,
-      font: { size: 14 }
+      text: `Historical Volatility Surface - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
+      font: { size: 16 }
     },
     scene: {
-      xaxis: { 
-        title: "Moneyness", 
-        tickformat: ".3f",
-        autorange: true,
+      xaxis: {
+        title: 'Moneyness',
+        titlefont: { size: 14 },
+        tickfont: { size: 12 }
       },
-      yaxis: { 
-        title: "Days to Expiry", 
-        tickformat: ".0f",
-        autorange: true,
+      yaxis: {
+        title: 'Days to Expiry',
+        titlefont: { size: 14 },
+        tickfont: { size: 12 }
       },
-      zaxis: { 
-        title: "Implied Volatility", 
-        tickformat: ".1%",
-        autorange: true,
+      zaxis: {
+        title: 'Implied Volatility',
+        titlefont: { size: 14 },
+        tickfont: { size: 12 },
+        tickformat: '.1%'
       },
       camera: {
-        eye: { x: 1.5, y: 1.5, z: 1.5 },
-        center: { x: 0, y: 0, z: 0 },
-        up: { x: 0, y: 0, z: 1 },
+        eye: { x: 1.2, y: 1.2, z: 1.2 }
       },
-      aspectratio: { x: 1, y: 1, z: 0.8 },
-      bgcolor: 'rgba(0,0,0,0)',
+      aspectmode: 'cube'
     },
-    margin: { l: 0, r: 0, b: 0, t: 50 },
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
+    margin: { l: 0, r: 0, b: 0, t: 40 },
     autosize: true,
   }), [selectedSurface, selectedSurfaceIndex, data]);
 
@@ -287,8 +339,15 @@ const HistoryPage: React.FC = () => {
                   id="limit"
                   value={limit}
                   onChange={(e) => {
-                    setLimit(Number(e.target.value));
-                    stopPlayback(); // Stop playback when changing limit
+                    const newLimit = Number(e.target.value);
+                    if (newLimit >= 2000) {
+                      const confirmed = window.confirm(
+                        `Loading ${newLimit.toLocaleString()} surfaces may take some time and use significant memory. Continue?`
+                      );
+                      if (!confirmed) return;
+                    }
+                    setLimit(newLimit);
+                    stopPlayback();
                   }}
                   className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
@@ -296,6 +355,11 @@ const HistoryPage: React.FC = () => {
                   <option value={25}>25</option>
                   <option value={50}>50</option>
                   <option value={100}>100</option>
+                  <option value={200}>200</option>
+                  <option value={500}>500</option>
+                  <option value={1000}>1,000</option>
+                  <option value={2000}>2,000 ⚠️</option>
+                  <option value={5000}>5,000 ⚠️</option>
                 </select>
               </div>
 
@@ -312,6 +376,23 @@ const HistoryPage: React.FC = () => {
                 </label>
               </div>
 
+              <div className="flex items-center space-x-2">
+                <label htmlFor="interpolation" className="text-sm text-gray-600">
+                  Smoothness:
+                </label>
+                <select
+                  id="interpolation"
+                  value={interpolationDensity}
+                  onChange={(e) => setInterpolationDensity(Number(e.target.value))}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value={10}>Low (10x10)</option>
+                  <option value={20}>Medium (20x20)</option>
+                  <option value={30}>High (30x30)</option>
+                  <option value={50}>Ultra (50x50)</option>
+                </select>
+              </div>
+
               <button 
                 onClick={refetch}
                 className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
@@ -319,102 +400,13 @@ const HistoryPage: React.FC = () => {
                 Refresh
               </button>
             </div>
-
-            {/* Animation Controls */}
-            {data && data.length > 1 && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded">
-                <h3 className="text-blue-800 font-medium mb-3">Timeline Playback</h3>
-                
-                {/* Playback Controls */}
-                <div className="flex items-center space-x-2 mb-3">
-                  <button
-                    onClick={resetToStart}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-                    title="Go to start"
-                  >
-                    ⏮
-                  </button>
-                  
-                  <button
-                    onClick={stepBackward}
-                    disabled={selectedSurfaceIndex === 0}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Step backward"
-                  >
-                    ⏪
-                  </button>
-                  
-                  <button
-                    onClick={isPlaying ? stopPlayback : startPlayback}
-                    className={`px-4 py-2 rounded text-sm font-medium ${
-                      isPlaying 
-                        ? 'bg-red-500 hover:bg-red-600 text-white' 
-                        : 'bg-green-500 hover:bg-green-600 text-white'
-                    }`}
-                  >
-                    {isPlaying ? '⏸ Pause' : '▶ Play'}
-                  </button>
-                  
-                  <button
-                    onClick={stepForward}
-                    disabled={selectedSurfaceIndex >= data.length - 1}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Step forward"
-                  >
-                    ⏩
-                  </button>
-                  
-                  <button
-                    onClick={goToEnd}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-                    title="Go to end"
-                  >
-                    ⏭
-                  </button>
-                </div>
-
-                {/* Timeline Slider */}
-                <div className="mb-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={data.length - 1}
-                    value={selectedSurfaceIndex}
-                    onChange={(e) => {
-                      stopPlayback();
-                      setSelectedSurfaceIndex(Number(e.target.value));
-                    }}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Oldest</span>
-                    <span>Frame {selectedSurfaceIndex + 1} of {data.length}</span>
-                    <span>Newest</span>
-                  </div>
-                </div>
-
-                {/* Speed Control */}
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="speed" className="text-sm text-gray-600">
-                    Speed:
-                  </label>
-                  <select
-                    id="speed"
-                    value={playbackSpeed}
-                    onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={2000}>0.5x (2s)</option>
-                    <option value={1000}>1x (1s)</option>
-                    <option value={500}>2x (0.5s)</option>
-                    <option value={250}>4x (0.25s)</option>
-                    <option value={100}>10x (0.1s)</option>
-                  </select>
-                </div>
+            {isLoadingLargeDataset && isLoading && (
+              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                Loading {limit} surfaces... This may take a moment for large datasets.
               </div>
             )}
 
-            {/* Manual Surface Selection (for single selection) */}
+            {/* Manual Surface Selection */}
             {data && data.length > 0 && (
               <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded">
                 <div className="flex items-center space-x-2">
@@ -462,6 +454,100 @@ const HistoryPage: React.FC = () => {
                 </div>
               </div>
             )}
+
+            {/* Animation Controls - NOW BELOW THE PLOT */}
+            {data && data.length > 1 && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded">
+                <h3 className="text-blue-800 font-medium mb-3">Timeline Playback</h3>
+                
+                {/* Playback Controls */}
+                <div className="flex items-center space-x-2 mb-3">
+                  <button
+                    onClick={resetToStart}
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+                    title="Go to oldest (start of timeline)"
+                  >
+                    ⏮
+                  </button>
+                  
+                  <button
+                    onClick={stepBackward}
+                    disabled={selectedSurfaceIndex >= data.length - 1}
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Step backward in time"
+                  >
+                    ⏪
+                  </button>
+                  
+                  <button
+                    onClick={isPlaying ? stopPlayback : startPlayback}
+                    className={`px-4 py-2 rounded text-sm font-medium ${
+                      isPlaying 
+                        ? 'bg-red-500 hover:bg-red-600 text-white' 
+                        : 'bg-green-500 hover:bg-green-600 text-white'
+                    }`}
+                  >
+                    {isPlaying ? '⏸ Pause' : '▶ Play Forward in Time'}
+                  </button>
+                  
+                  <button
+                    onClick={stepForward}
+                    disabled={selectedSurfaceIndex === 0}
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Step forward in time"
+                  >
+                    ⏩
+                  </button>
+                  
+                  <button
+                    onClick={goToEnd}
+                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
+                    title="Go to newest (end of timeline)"
+                  >
+                    ⏭
+                  </button>
+                </div>
+
+                {/* Timeline Slider - Fixed to show oldest on left, newest on right */}
+                <div className="mb-3">
+                  <input
+                    type="range"
+                    min={0}
+                    max={data.length - 1}
+                    value={data.length - 1 - selectedSurfaceIndex} // Flip the slider value
+                    onChange={(e) => {
+                      stopPlayback();
+                      setSelectedSurfaceIndex(data.length - 1 - Number(e.target.value)); // Flip back when setting
+                    }}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Oldest</span> {/* Left side = oldest */}
+                    <span>Frame {data.length - selectedSurfaceIndex} of {data.length}</span> {/* Frame 1 = oldest */}
+                    <span>Newest</span> {/* Right side = newest */}
+                  </div>
+                </div>
+
+                {/* Speed Control */}
+                <div className="flex items-center space-x-2">
+                  <label htmlFor="speed" className="text-sm text-gray-600">
+                    Speed:
+                  </label>
+                  <select
+                    id="speed"
+                    value={playbackSpeed}
+                    onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={2000}>0.5x (2s)</option>
+                    <option value={1000}>1x (1s)</option>
+                    <option value={500}>2x (0.5s)</option>
+                    <option value={250}>4x (0.25s)</option>
+                    <option value={100}>10x (0.1s)</option>
+                  </select>
+                </div>
+              </div>
+            )}
             
             {/* Show debug info when no plot data */}
             {selectedSurface && plotData.length === 0 && (
@@ -483,7 +569,7 @@ const HistoryPage: React.FC = () => {
           </div>
         </Container>
 
-        {/* Surface Data Summary */}
+        {/* Surface Data Summary - Update the history overview to be clearer */}
         <Container title="Surface Information">
           {selectedSurface ? (
             <div className="space-y-4">
@@ -519,8 +605,8 @@ const HistoryPage: React.FC = () => {
                   <h4 className="font-medium text-gray-700">History Overview:</h4>
                   <div className="text-sm text-gray-600">
                     <p>Total Surfaces: {data.length}</p>
+                    <p>Newest: {data.length > 0 ? new Date(data[0].timestamp).toLocaleString() : 'N/A'}</p> {/* Clarified which is which */}
                     <p>Oldest: {data.length > 0 ? new Date(data[data.length - 1].timestamp).toLocaleString() : 'N/A'}</p>
-                    <p>Newest: {data.length > 0 ? new Date(data[0].timestamp).toLocaleString() : 'N/A'}</p>
                   </div>
                 </div>
               )}

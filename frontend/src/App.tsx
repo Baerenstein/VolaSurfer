@@ -14,8 +14,8 @@ const App: React.FC = () => {
           onClick={() => setCurrentPage('surface')}
           className="px-8 py-6 bg-white rounded-lg shadow-lg hover:shadow-xl transition-shadow"
         >
-          <h2 className="text-xl font-semibold mb-2">Live Surface</h2>
-          <p className="text-gray-600">Real-time volatility surface analysis</p>
+          <h2 className="text-xl font-semibold mb-2">Latest Surface</h2>
+          <p className="text-gray-600">The latest volatility surface</p>
         </button>
         <button
           onClick={() => setCurrentPage('history')}
