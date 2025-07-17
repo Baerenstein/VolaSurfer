@@ -6,10 +6,11 @@ import { HistoricalSurfaceData } from '../../types/surface';
 interface ContainerProps {
   title: string;
   children?: React.ReactNode;
+  className?: string;
 }
 
-const Container: React.FC<ContainerProps> = ({ title, children }) => (
-  <div className="flex-1 m-4 bg-white rounded-lg shadow-lg">
+const Container: React.FC<ContainerProps> = ({ title, children, className = "flex-1" }) => (
+  <div className={`${className} m-4 bg-white rounded-lg shadow-lg`}>
     <div className="p-6">
       <h2 className="text-xl font-semibold mb-4">{title}</h2>
       {children}
@@ -288,7 +289,7 @@ const HistoryPage: React.FC = () => {
         range: [0, 2.6] // Fixed range: 0% to 180%
       },
       camera: {
-        eye: { x: 1.2, y: 1.2, z: 1.2 }
+        eye: { x: 0.1, y: 1.5, z: 0.2 }
       },
       aspectmode: 'cube'
     },
@@ -328,110 +329,15 @@ const HistoryPage: React.FC = () => {
   return (
     <div className="flex flex-col w-full min-h-screen bg-gray-100">
       <div className="flex flex-1 p-4">
-        <Container title="Historical Volatility Surfaces">
+        <Container title="Historical Volatility Surfaces" className="flex-[3]">
           <div className="space-y-4">
-            {/* Main Controls */}
-            <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded">
-              <div className="flex items-center space-x-2">
-                <label htmlFor="limit" className="text-sm text-gray-600">
-                  Limit:
-                </label>
-                <select
-                  id="limit"
-                  value={limit}
-                  onChange={(e) => {
-                    const newLimit = Number(e.target.value);
-                    if (newLimit >= 2000) {
-                      const confirmed = window.confirm(
-                        `Loading ${newLimit.toLocaleString()} surfaces may take some time and use significant memory. Continue?`
-                      );
-                      if (!confirmed) return;
-                    }
-                    setLimit(newLimit);
-                    stopPlayback();
-                  }}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={10}>10</option>
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={200}>200</option>
-                  <option value={500}>500</option>
-                  <option value={1000}>1,000</option>
-                  <option value={2000}>2,000 ⚠️</option>
-                  <option value={5000}>5,000 ⚠️</option>
-                </select>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="wireframe"
-                  checked={showWireframe}
-                  onChange={(e) => setShowWireframe(e.target.checked)}
-                  className="rounded"
-                />
-                <label htmlFor="wireframe" className="text-sm text-gray-600">
-                  Wireframe
-                </label>
-              </div>
-
-              <div className="flex items-center space-x-2">
-                <label htmlFor="interpolation" className="text-sm text-gray-600">
-                  Smoothness:
-                </label>
-                <select
-                  id="interpolation"
-                  value={interpolationDensity}
-                  onChange={(e) => setInterpolationDensity(Number(e.target.value))}
-                  className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value={10}>Low (10x10)</option>
-                  <option value={20}>Medium (20x20)</option>
-                  <option value={30}>High (30x30)</option>
-                  <option value={50}>Ultra (50x50)</option>
-                </select>
-              </div>
-
-              <button 
-                onClick={refetch}
-                className="px-3 py-1 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-              >
-                Refresh
-              </button>
-            </div>
             {isLoadingLargeDataset && isLoading && (
               <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
                 Loading {limit} surfaces... This may take a moment for large datasets.
               </div>
             )}
 
-            {/* Manual Surface Selection */}
-            {data && data.length > 0 && (
-              <div className="flex items-center space-x-4 p-4 bg-gray-50 rounded">
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="surface-select" className="text-sm text-gray-600">
-                    Manual Selection:
-                  </label>
-                  <select
-                    id="surface-select"
-                    value={selectedSurfaceIndex}
-                    onChange={(e) => {
-                      stopPlayback();
-                      setSelectedSurfaceIndex(Number(e.target.value));
-                    }}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {data.map((surface, index) => (
-                      <option key={index} value={index}>
-                        {index + 1}: {new Date(surface.timestamp).toLocaleString()}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-            )}
+
 
             {/* Surface Plot */}
             {selectedSurface && plotData.length > 0 && (
@@ -456,99 +362,7 @@ const HistoryPage: React.FC = () => {
               </div>
             )}
 
-            {/* Animation Controls - NOW BELOW THE PLOT */}
-            {data && data.length > 1 && (
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded">
-                <h3 className="text-blue-800 font-medium mb-3">Timeline Playback</h3>
-                
-                {/* Playback Controls */}
-                <div className="flex items-center space-x-2 mb-3">
-                  <button
-                    onClick={resetToStart}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-                    title="Go to oldest (start of timeline)"
-                  >
-                    ⏮
-                  </button>
-                  
-                  <button
-                    onClick={stepBackward}
-                    disabled={selectedSurfaceIndex >= data.length - 1}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Step backward in time"
-                  >
-                    ⏪
-                  </button>
-                  
-                  <button
-                    onClick={isPlaying ? stopPlayback : startPlayback}
-                    className={`px-4 py-2 rounded text-sm font-medium ${
-                      isPlaying 
-                        ? 'bg-red-500 hover:bg-red-600 text-white' 
-                        : 'bg-green-500 hover:bg-green-600 text-white'
-                    }`}
-                  >
-                    {isPlaying ? '⏸ Pause' : '▶ Play Forward in Time'}
-                  </button>
-                  
-                  <button
-                    onClick={stepForward}
-                    disabled={selectedSurfaceIndex === 0}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Step forward in time"
-                  >
-                    ⏩
-                  </button>
-                  
-                  <button
-                    onClick={goToEnd}
-                    className="px-3 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600"
-                    title="Go to newest (end of timeline)"
-                  >
-                    ⏭
-                  </button>
-                </div>
 
-                {/* Timeline Slider - Fixed to show oldest on left, newest on right */}
-                <div className="mb-3">
-                  <input
-                    type="range"
-                    min={0}
-                    max={data.length - 1}
-                    value={data.length - 1 - selectedSurfaceIndex} // Flip the slider value
-                    onChange={(e) => {
-                      stopPlayback();
-                      setSelectedSurfaceIndex(data.length - 1 - Number(e.target.value)); // Flip back when setting
-                    }}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Oldest</span> {/* Left side = oldest */}
-                    <span>Frame {data.length - selectedSurfaceIndex} of {data.length}</span> {/* Frame 1 = oldest */}
-                    <span>Newest</span> {/* Right side = newest */}
-                  </div>
-                </div>
-
-                {/* Speed Control */}
-                <div className="flex items-center space-x-2">
-                  <label htmlFor="speed" className="text-sm text-gray-600">
-                    Speed:
-                  </label>
-                  <select
-                    id="speed"
-                    value={playbackSpeed}
-                    onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                    className="px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={2000}>0.5x (2s)</option>
-                    <option value={1000}>1x (1s)</option>
-                    <option value={500}>2x (0.5s)</option>
-                    <option value={250}>4x (0.25s)</option>
-                    <option value={100}>10x (0.1s)</option>
-                  </select>
-                </div>
-              </div>
-            )}
             
             {/* Show debug info when no plot data */}
             {selectedSurface && plotData.length === 0 && (
@@ -570,10 +384,207 @@ const HistoryPage: React.FC = () => {
           </div>
         </Container>
 
-        {/* Surface Data Summary - Update the history overview to be clearer */}
-        <Container title="Surface Information">
+        {/* Controls */}
+        <Container title="Controls" className="flex-1">
+          <div className="space-y-4">
+            {/* Main Controls */}
+            <div className="space-y-3 p-3 bg-gray-50 rounded">
+              <h4 className="font-medium text-gray-700">Settings</h4>
+              
+              <div className="space-y-2">
+                <div>
+                  <label htmlFor="limit" className="block text-sm text-gray-600 mb-1">
+                    Data Limit:
+                  </label>
+                  <select
+                    id="limit"
+                    value={limit}
+                    onChange={(e) => {
+                      const newLimit = Number(e.target.value);
+                      if (newLimit >= 2000) {
+                        const confirmed = window.confirm(
+                          `Loading ${newLimit.toLocaleString()} surfaces may take some time and use significant memory. Continue?`
+                        );
+                        if (!confirmed) return;
+                      }
+                      setLimit(newLimit);
+                      stopPlayback();
+                    }}
+                    className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={10}>10</option>
+                    <option value={25}>25</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                    <option value={500}>500</option>
+                    <option value={1000}>1,000</option>
+                    <option value={2000}>2,000 ⚠️</option>
+                    <option value={5000}>5,000 ⚠️</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label htmlFor="interpolation" className="block text-sm text-gray-600 mb-1">
+                    Smoothness:
+                  </label>
+                  <select
+                    id="interpolation"
+                    value={interpolationDensity}
+                    onChange={(e) => setInterpolationDensity(Number(e.target.value))}
+                    className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={10}>Low (10x10)</option>
+                    <option value={20}>Medium (20x20)</option>
+                    <option value={30}>High (30x30)</option>
+                    <option value={50}>Ultra (50x50)</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    id="wireframe"
+                    checked={showWireframe}
+                    onChange={(e) => setShowWireframe(e.target.checked)}
+                    className="rounded"
+                  />
+                  <label htmlFor="wireframe" className="text-sm text-gray-600">
+                    Wireframe Mode
+                  </label>
+                </div>
+
+                <button 
+                  onClick={refetch}
+                  className="w-full px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
+                >
+                  Refresh Data
+                </button>
+              </div>
+            </div>
+
+            {/* Playback Controls */}
+            {data && data.length > 1 && (
+              <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded">
+                <h4 className="font-medium text-blue-800">Timeline Playback</h4>
+                
+                {/* Control Buttons */}
+                <div className="grid grid-cols-5 gap-1">
+                  <button
+                    onClick={resetToStart}
+                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                    title="Go to oldest (start of timeline)"
+                  >
+                    ⏮
+                  </button>
+                  
+                  <button
+                    onClick={stepBackward}
+                    disabled={selectedSurfaceIndex >= data.length - 1}
+                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Step backward in time"
+                  >
+                    ⏪
+                  </button>
+                  
+                  <button
+                    onClick={isPlaying ? stopPlayback : startPlayback}
+                    className={`px-2 py-1 rounded text-xs font-medium col-span-1 ${
+                      isPlaying 
+                        ? 'bg-red-500 hover:bg-red-600 text-white' 
+                        : 'bg-green-500 hover:bg-green-600 text-white'
+                    }`}
+                  >
+                    {isPlaying ? '⏸' : '▶'}
+                  </button>
+                  
+                  <button
+                    onClick={stepForward}
+                    disabled={selectedSurfaceIndex === 0}
+                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Step forward in time"
+                  >
+                    ⏩
+                  </button>
+                  
+                  <button
+                    onClick={goToEnd}
+                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
+                    title="Go to newest (end of timeline)"
+                  >
+                    ⏭
+                  </button>
+                </div>
+
+                {/* Timeline Slider */}
+                <div>
+                  <input
+                    type="range"
+                    min={0}
+                    max={data.length - 1}
+                    value={data.length - 1 - selectedSurfaceIndex}
+                    onChange={(e) => {
+                      stopPlayback();
+                      setSelectedSurfaceIndex(data.length - 1 - Number(e.target.value));
+                    }}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Oldest</span>
+                    <span>Frame {data.length - selectedSurfaceIndex} of {data.length}</span>
+                    <span>Newest</span>
+                  </div>
+                </div>
+
+                {/* Speed Control */}
+                <div>
+                  <label htmlFor="speed" className="block text-sm text-gray-600 mb-1">
+                    Playback Speed:
+                  </label>
+                  <select
+                    id="speed"
+                    value={playbackSpeed}
+                    onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value={2000}>0.5x (2s)</option>
+                    <option value={1000}>1x (1s)</option>
+                    <option value={500}>2x (0.5s)</option>
+                    <option value={250}>4x (0.25s)</option>
+                    <option value={100}>10x (0.1s)</option>
+                  </select>
+                </div>
+              </div>
+            )}
+
+            {/* Manual Surface Selection */}
+            {data && data.length > 0 && (
+              <div className="space-y-2 p-3 bg-gray-50 rounded">
+                <label htmlFor="surface-select" className="block text-sm font-medium text-gray-700">
+                  Manual Selection:
+                </label>
+                <select
+                  id="surface-select"
+                  value={selectedSurfaceIndex}
+                  onChange={(e) => {
+                    stopPlayback();
+                    setSelectedSurfaceIndex(Number(e.target.value));
+                  }}
+                  className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  {data.map((surface, index) => (
+                    <option key={index} value={index}>
+                      {data.length - index}: {new Date(surface.timestamp).toLocaleString()}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* Surface Information */}
           {selectedSurface ? (
-            <div className="space-y-4">
+            <div className="space-y-4 mt-4">
               <div className="text-sm text-gray-600">
                 <p><strong>Frame:</strong> {selectedSurfaceIndex + 1} of {data?.length || 0}</p>
                 <p><strong>Timestamp:</strong> {new Date(selectedSurface.timestamp).toLocaleString()}</p>
