@@ -284,7 +284,8 @@ const HistoryPage: React.FC = () => {
         title: 'Implied Volatility',
         titlefont: { size: 14 },
         tickfont: { size: 12 },
-        tickformat: '.1%'
+        tickformat: '.1%',
+        range: [0, 2.6] // Fixed range: 0% to 180%
       },
       camera: {
         eye: { x: 1.2, y: 1.2, z: 1.2 }
