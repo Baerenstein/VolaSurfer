@@ -65,6 +65,7 @@ export function useSurfaceHistory({
         maturities: surface.maturities || [],
         option_type: surface.option_type || [],
         method: surface.method,
+        spot_price: surface.spot_price,
       }));
       
       console.log('Transformed data:', data); // Debug log

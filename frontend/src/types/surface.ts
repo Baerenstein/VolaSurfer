@@ -26,6 +26,7 @@ export interface HistoricalSurfaceData {
   maturities?: string[];
   option_type?: string[];
   method?: string;
+  spot_price?: number;
 }
 
 export interface SurfaceHistoryState {

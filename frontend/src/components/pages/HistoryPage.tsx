@@ -10,9 +10,9 @@ interface ContainerProps {
 }
 
 const Container: React.FC<ContainerProps> = ({ title, children, className = "flex-1" }) => (
-  <div className={`${className} m-4 bg-white rounded-lg shadow-lg`}>
+  <div className={`${className} m-4 bg-black border border-gray-600 rounded-lg shadow-lg`}>
     <div className="p-6">
-      <h2 className="text-xl font-semibold mb-4">{title}</h2>
+      <h2 className="text-xl font-semibold mb-4 text-white">{title}</h2>
       {children}
     </div>
   </div>
@@ -215,7 +215,7 @@ const HistoryPage: React.FC = () => {
         y: gridDTE,
         z: validMatrix,
         showscale: true,
-        colorscale: "Viridis",
+        colorscale: 'Viridis',
         cmin: minVal,
         cmax: maxVal,
         contours: {
@@ -267,26 +267,35 @@ const HistoryPage: React.FC = () => {
 
   const layout = useMemo(() => ({
     title: {
-      text: `Historical Volatility Surface - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
-      font: { size: 16 }
+      text: `Historical Volatility Surface${selectedSurface?.spot_price ? ` - BTC $${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''} - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
+      font: { size: 16, color: 'white' }
     },
+    paper_bgcolor: 'black',
+    plot_bgcolor: 'black',
     scene: {
+      bgcolor: 'black',
       xaxis: {
         title: 'Moneyness',
-        titlefont: { size: 14 },
-        tickfont: { size: 12 }
+        titlefont: { size: 14, color: 'white' },
+        tickfont: { size: 12, color: 'white' },
+        gridcolor: '#444444',
+        zerolinecolor: '#666666'
       },
       yaxis: {
         title: 'Days to Expiry',
-        titlefont: { size: 14 },
-        tickfont: { size: 12 }
+        titlefont: { size: 14, color: 'white' },
+        tickfont: { size: 12, color: 'white' },
+        gridcolor: '#444444',
+        zerolinecolor: '#666666'
       },
       zaxis: {
         title: 'Implied Volatility',
-        titlefont: { size: 14 },
-        tickfont: { size: 12 },
+        titlefont: { size: 14, color: 'white' },
+        tickfont: { size: 12, color: 'white' },
         tickformat: '.1%',
-        range: [0, 2.6] // Fixed range: 0% to 180%
+        range: [0, 2.6], // Fixed range: 0% to 180%
+        gridcolor: '#444444',
+        zerolinecolor: '#666666'
       },
       camera: {
         eye: { x: 0.1, y: 1.5, z: 0.2 }
@@ -299,9 +308,9 @@ const HistoryPage: React.FC = () => {
 
   if (isLoading) {
     return (
-      <div className="flex flex-col w-full min-h-screen bg-gray-100">
+      <div className="flex flex-col w-full min-h-screen bg-black">
         <div className="flex flex-1 p-4 justify-center items-center">
-          <div className="text-lg">Loading historical data...</div>
+          <div className="text-lg text-white">Loading historical data...</div>
         </div>
       </div>
     );
@@ -309,9 +318,9 @@ const HistoryPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="flex flex-col w-full min-h-screen bg-gray-100">
+      <div className="flex flex-col w-full min-h-screen bg-black">
         <div className="flex flex-1 p-4 justify-center items-center">
-          <div className="text-red-500 text-center">
+          <div className="text-red-400 text-center">
             <div className="text-lg mb-4">Error loading historical data</div>
             <div className="text-sm mb-4">{error}</div>
             <button 
@@ -327,7 +336,7 @@ const HistoryPage: React.FC = () => {
   }
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-gray-100">
+    <div className="flex flex-col w-full min-h-screen bg-black">
       <div className="flex flex-1 p-4">
         <Container title="Historical Volatility Surfaces" className="flex-[3]">
           <div className="space-y-4">
@@ -341,7 +350,7 @@ const HistoryPage: React.FC = () => {
 
             {/* Surface Plot */}
             {selectedSurface && plotData.length > 0 && (
-              <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+              <div className="bg-black border border-gray-600 rounded-lg shadow-lg overflow-hidden">
                 <div className="p-4">
                   <Plot
                     data={plotData}
@@ -388,12 +397,12 @@ const HistoryPage: React.FC = () => {
         <Container title="Controls" className="flex-1">
           <div className="space-y-4">
             {/* Main Controls */}
-            <div className="space-y-3 p-3 bg-gray-50 rounded">
-              <h4 className="font-medium text-gray-700">Settings</h4>
+            <div className="space-y-3 p-3 bg-gray-900 border border-gray-600 rounded">
+              <h4 className="font-medium text-white">Settings</h4>
               
               <div className="space-y-2">
                 <div>
-                  <label htmlFor="limit" className="block text-sm text-gray-600 mb-1">
+                  <label htmlFor="limit" className="block text-sm text-gray-300 mb-1">
                     Data Limit:
                   </label>
                   <select
@@ -425,7 +434,7 @@ const HistoryPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label htmlFor="interpolation" className="block text-sm text-gray-600 mb-1">
+                  <label htmlFor="interpolation" className="block text-sm text-gray-300 mb-1">
                     Smoothness:
                   </label>
                   <select
@@ -449,7 +458,7 @@ const HistoryPage: React.FC = () => {
                     onChange={(e) => setShowWireframe(e.target.checked)}
                     className="rounded"
                   />
-                  <label htmlFor="wireframe" className="text-sm text-gray-600">
+                  <label htmlFor="wireframe" className="text-sm text-gray-300">
                     Wireframe Mode
                   </label>
                 </div>
@@ -465,8 +474,8 @@ const HistoryPage: React.FC = () => {
 
             {/* Playback Controls */}
             {data && data.length > 1 && (
-              <div className="space-y-3 p-3 bg-blue-50 border border-blue-200 rounded">
-                <h4 className="font-medium text-blue-800">Timeline Playback</h4>
+              <div className="space-y-3 p-3 bg-gray-900 border border-gray-600 rounded">
+                <h4 className="font-medium text-white">Timeline Playback</h4>
                 
                 {/* Control Buttons */}
                 <div className="grid grid-cols-5 gap-1">
@@ -538,7 +547,7 @@ const HistoryPage: React.FC = () => {
 
                 {/* Speed Control */}
                 <div>
-                  <label htmlFor="speed" className="block text-sm text-gray-600 mb-1">
+                  <label htmlFor="speed" className="block text-sm text-gray-300 mb-1">
                     Playback Speed:
                   </label>
                   <select
@@ -559,8 +568,8 @@ const HistoryPage: React.FC = () => {
 
             {/* Manual Surface Selection */}
             {data && data.length > 0 && (
-              <div className="space-y-2 p-3 bg-gray-50 rounded">
-                <label htmlFor="surface-select" className="block text-sm font-medium text-gray-700">
+              <div className="space-y-2 p-3 bg-gray-900 border border-gray-600 rounded">
+                <label htmlFor="surface-select" className="block text-sm font-medium text-gray-300">
                   Manual Selection:
                 </label>
                 <select
@@ -585,18 +594,19 @@ const HistoryPage: React.FC = () => {
           {/* Surface Information */}
           {selectedSurface ? (
             <div className="space-y-4 mt-4">
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-gray-300">
                 <p><strong>Frame:</strong> {selectedSurfaceIndex + 1} of {data?.length || 0}</p>
                 <p><strong>Timestamp:</strong> {new Date(selectedSurface.timestamp).toLocaleString()}</p>
                 <p><strong>Snapshot ID:</strong> {selectedSurface.snapshot_id || 'N/A'}</p>
                 <p><strong>Asset ID:</strong> {selectedSurface.asset_id || 'N/A'}</p>
                 <p><strong>Method:</strong> {selectedSurface.method || 'N/A'}</p>
+                <p><strong>Spot Price:</strong> {selectedSurface.spot_price ? `$${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A'}</p>
                 <p><strong>Status:</strong> {isPlaying ? '▶ Playing' : '⏸ Paused'}</p>
               </div>
               
               <div className="space-y-2">
-                <h4 className="font-medium text-gray-700">Surface Dimensions:</h4>
-                <div className="text-sm text-gray-600">
+                <h4 className="font-medium text-white">Surface Dimensions:</h4>
+                <div className="text-sm text-gray-300">
                   <p>Total Points: {selectedSurface.moneyness?.length || 0}</p>
                   <p>Unique Strikes: {selectedSurface.moneyness ? [...new Set(selectedSurface.moneyness)].length : 0}</p>
                   <p>Unique Expiries: {selectedSurface.daysToExpiry ? [...new Set(selectedSurface.daysToExpiry)].length : 0}</p>
@@ -614,8 +624,8 @@ const HistoryPage: React.FC = () => {
 
               {data && (
                 <div className="space-y-2">
-                  <h4 className="font-medium text-gray-700">History Overview:</h4>
-                  <div className="text-sm text-gray-600">
+                  <h4 className="font-medium text-white">History Overview:</h4>
+                  <div className="text-sm text-gray-300">
                     <p>Total Surfaces: {data.length}</p>
                     <p>Newest: {data.length > 0 ? new Date(data[0].timestamp).toLocaleString() : 'N/A'}</p> {/* Clarified which is which */}
                     <p>Oldest: {data.length > 0 ? new Date(data[data.length - 1].timestamp).toLocaleString() : 'N/A'}</p>
@@ -624,7 +634,7 @@ const HistoryPage: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="text-gray-500">Select a surface to view details</div>
+            <div className="text-gray-400">Select a surface to view details</div>
           )}
         </Container>
       </div>

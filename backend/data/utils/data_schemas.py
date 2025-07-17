@@ -139,8 +139,9 @@ class VolSurface:
     option_type: List[str]
     snapshot_id: Optional[str] = None
     asset_id: Optional[str] = None
+    spot_price: Optional[float] = None
 
-    def __init__(self, timestamp, method, strikes, moneyness, maturities, days_to_expiry, implied_vols, option_type, snapshot_id, asset_id=None):
+    def __init__(self, timestamp, method, strikes, moneyness, maturities, days_to_expiry, implied_vols, option_type, snapshot_id, asset_id=None, spot_price=None):
         self.timestamp = timestamp
         self.method = method
         self.strikes = strikes
@@ -151,6 +152,7 @@ class VolSurface:
         self.option_type = option_type
         self.snapshot_id = snapshot_id
         self.asset_id = asset_id
+        self.spot_price = spot_price
 
     def to_dict(self):
         return {
@@ -163,6 +165,7 @@ class VolSurface:
             "implied_vols": self.implied_vols,
             "snapshot_id": self.snapshot_id,
             "asset_id": self.asset_id,
+            "spot_price": self.spot_price,
         }
 
 

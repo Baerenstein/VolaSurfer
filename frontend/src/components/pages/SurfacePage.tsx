@@ -9,9 +9,9 @@ interface ContainerProps {
 }
 
 const Container: React.FC<ContainerProps> = ({ title, children }) => (
-  <div className="flex-1 m-4 bg-white rounded-lg shadow-lg">
+  <div className="flex-1 m-4 bg-black border border-gray-600 rounded-lg shadow-lg">
     <div className="p-6">
-      <h2 className="text-xl font-semibold mb-4">{title}</h2>
+      <h2 className="text-xl font-semibold mb-4 text-white">{title}</h2>
       {children}
     </div>
   </div>
@@ -36,8 +36,6 @@ const MemoizedPlot = memo(({ data, layout }: { data: any; layout: any }) => {
       />
     </div>
   );
-}, (prevProps, nextProps) => {
-  return !nextProps.shouldRender; // Prevent unnecessary updates
 });
 
 const SurfacePage: React.FC = () => {
@@ -78,15 +76,44 @@ const SurfacePage: React.FC = () => {
   const stableRevisionId = useRef(`plot-${Date.now()}`);
 
   const [layout, setLayout] = useState({
-    title: "Volatility Surface",
+    title: {
+      text: "Volatility Surface",
+      font: { size: 16, color: 'white' }
+    },
+    paper_bgcolor: 'black',
+    plot_bgcolor: 'black',
     scene: {
-      xaxis: { title: "Moneyness", tickformat: ".2f", autorange: "reversed" },
-      yaxis: { title: "Days to Expiry", tickformat: ".0f", autorange: "reversed" },
-      zaxis: { title: "Implied Volatility", tickformat: ".2%" },
+      bgcolor: 'black',
+      xaxis: { 
+        title: "Moneyness", 
+        tickformat: ".2f", 
+        autorange: "reversed",
+        titlefont: { size: 14, color: 'white' },
+        tickfont: { size: 12, color: 'white' },
+        gridcolor: '#444444',
+        zerolinecolor: '#666666'
+      },
+      yaxis: { 
+        title: "Days to Expiry", 
+        tickformat: ".0f", 
+        autorange: "reversed",
+        titlefont: { size: 14, color: 'white' },
+        tickfont: { size: 12, color: 'white' },
+        gridcolor: '#444444',
+        zerolinecolor: '#666666'
+      },
+      zaxis: { 
+        title: "Implied Volatility", 
+        tickformat: ".2%",
+        titlefont: { size: 14, color: 'white' },
+        tickfont: { size: 12, color: 'white' },
+        gridcolor: '#444444',
+        zerolinecolor: '#666666'
+      },
       camera: cameraRef.current,
       aspectratio: { x: 1.5, y: 1.5, z: 1 },
     },
-    margin: { l: 0, r: 0, b: 0, t: 0 },
+    margin: { l: 0, r: 0, b: 0, t: 40 },
     uirevision: stableRevisionId.current,
   });
 
@@ -102,11 +129,11 @@ const SurfacePage: React.FC = () => {
   // Update the plot data (remove the smoothing property since we're using server-side interpolation)
   const plotData = [{
     type: 'surface',
-    x: surfaceData.data?.moneyness || [],
-    y: surfaceData.data?.daysToExpiry || [],
-    z: surfaceData.data?.impliedVols?.map(row => row.map(vol => vol / 100)) || [],
+    x: (surfaceData.data as any)?.moneyness || [],
+    y: (surfaceData.data as any)?.daysToExpiry || [],
+    z: (surfaceData.data as any)?.impliedVols?.map((row: any) => row.map((vol: any) => vol / 100)) || [],
     showscale: true,
-    colorscale: "Viridis",
+    colorscale: 'Viridis',
     contours: {
       z: {
         show: true,
@@ -125,23 +152,23 @@ const SurfacePage: React.FC = () => {
   }];
 
   return (
-    <div className="flex flex-col w-full min-h-screen bg-gray-100">
+    <div className="flex flex-col w-full min-h-screen bg-black">
       <div className="flex flex-1 p-4">
         <Container title="VolaSurfer">
-          {surfaceData.isLoading && <div>Loading...</div>}
-          {surfaceData.error && <div className="text-red-500">{surfaceData.error}</div>}
+          {surfaceData.isLoading && <div className="text-white">Loading...</div>}
+          {surfaceData.error && <div className="text-red-400">{surfaceData.error}</div>}
           <div 
-            className="bg-white rounded-lg shadow-lg overflow-hidden"
+            className="bg-black border border-gray-600 rounded-lg shadow-lg overflow-hidden"
             onWheel={handleScroll} // 🔥 Detect scroll without re-rendering
             onTouchMove={handleScroll} // 🔥 Mobile scroll detection
             onMouseDown={handleMouseDown} // 🔥 Detect mouse press
             onMouseUp={handleMouseUp} // 🔥 Detect mouse release
           >
-            <div className="px-6 py-4 border-b border-gray-200">
+            <div className="px-6 py-4 border-b border-gray-600">
               <div className="flex justify-between items-center">
-                <h3 className="text-lg font-semibold text-gray-800">Surface</h3>
+                <h3 className="text-lg font-semibold text-white">Surface</h3>
                 <div className="flex items-center space-x-2">
-                  <label htmlFor="interpolation" className="text-sm text-gray-600">
+                  <label htmlFor="interpolation" className="text-sm text-gray-300">
                     Interpolation:
                   </label>
                   <select
@@ -160,7 +187,6 @@ const SurfacePage: React.FC = () => {
               <MemoizedPlot 
                 data={plotData}
                 layout={layout}
-                shouldRender={shouldRender}
               />
             </div>
           </div>

@@ -478,9 +478,24 @@ class PostgresStore(BaseStore):
             if not surface_rows:
                 return []
             
-            # Extract surface IDs
+            # Extract surface IDs and timestamps
             surface_ids = [row[0] for row in surface_rows]
             surface_metadata = {row[0]: (row[1], row[2], row[3], row[4]) for row in surface_rows}  # id -> (timestamp, method, snapshot_id, asset_id)
+            surface_timestamps = [row[1] for row in surface_rows]
+            
+            # Get spot prices for each surface timestamp
+            spot_prices = {}
+            if surface_timestamps:
+                # For each surface timestamp, get the closest underlying price
+                for surface_id, (timestamp, _, _, asset_id) in surface_metadata.items():
+                    price_query = """
+                    SELECT price FROM underlying_data 
+                    WHERE asset_id = %s AND timestamp <= %s 
+                    ORDER BY timestamp DESC LIMIT 1
+                    """
+                    cur.execute(price_query, (asset_id, timestamp))
+                    price_row = cur.fetchone()
+                    spot_prices[surface_id] = float(price_row[0]) if price_row else None
             
             # Now get ALL points for these surfaces
             points_query = """
@@ -522,6 +537,7 @@ class PostgresStore(BaseStore):
             if surface_id in surface_points:
                 timestamp, method, snapshot_id, asset_id = surface_metadata[surface_id]
                 points = surface_points[surface_id]
+                spot_price = spot_prices.get(surface_id)
                 
                 surface = VolSurface(
                     timestamp=timestamp,
@@ -533,7 +549,8 @@ class PostgresStore(BaseStore):
                     maturities=points['maturities'],
                     days_to_expiry=points['days_to_expiry'],
                     implied_vols=points['implied_vols'],
-                    option_type=points['option_type']
+                    option_type=points['option_type'],
+                    spot_price=spot_price
                 )
                 surfaces.append(surface)
         

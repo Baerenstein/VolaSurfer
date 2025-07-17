@@ -37,7 +37,7 @@ const Surface: React.FC<SurfaceProps> = ({ moneyness, daysToExpiry, impliedVols 
                 y: daysToExpiry,
                 z: impliedVols,
                 showscale: false,
-                colorscale: 'Viridis', // change colorscale to something else, including read
+                colorscale: 'Viridis',
                 contours: {
                   z: {
                     show: true,
