@@ -434,6 +434,64 @@ class PostgresStore(BaseStore):
                 "implied_vols": implied_vols
             }
 
+    def get_last_n_surfaces(self, limit: int = 100) -> List[VolSurface]:
+        """
+        Retrieve the last N volatility surfaces ordered by timestamp descending.
+
+        Args:
+            limit: Number of surfaces to retrieve
+
+        Returns:
+            List of VolSurface objects
+        """
+        query = """
+        SELECT s.id, s.timestamp, s.method, s.snapshot_id, sp.strike, sp.moneyness, sp.maturity, 
+               sp.days_to_expiry, sp.implied_vol, sp.option_type
+        FROM surfaces s
+        JOIN surface_points sp ON s.id = sp.surface_id
+        ORDER BY s.timestamp DESC
+        LIMIT %s
+        """
+        with self.conn.cursor() as cur:
+            cur.execute(query, (limit,))
+            rows = cur.fetchall()
+
+        surfaces = []
+        current_surface_id = None
+        current_surface = None
+
+        for row in rows:
+            surface_id, timestamp, method, snapshot_id, strike, moneyness, maturity, dte, implied_vol, option_type = row
+
+            if surface_id != current_surface_id:
+                if current_surface:
+                    surfaces.append(current_surface)
+
+                current_surface = VolSurface(
+                    timestamp=timestamp,
+                    method=method,
+                    snapshot_id=snapshot_id,
+                    strikes=[],
+                    moneyness=[],
+                    maturities=[],
+                    days_to_expiry=[],
+                    implied_vols=[],
+                    option_type=[]
+                )
+                current_surface_id = surface_id
+
+            current_surface.strikes.append(strike)
+            current_surface.moneyness.append(moneyness)
+            current_surface.maturities.append(maturity)
+            current_surface.days_to_expiry.append(dte)
+            current_surface.implied_vols.append(implied_vol)
+            current_surface.option_type.append(option_type)
+
+        if current_surface:
+            surfaces.append(current_surface)
+
+        return surfaces
+
     def get_or_create_asset(self, asset_type: str, ticker: str) -> int:
         """Get the asset ID or create a new asset if it doesn't exist"""
         with self.conn.cursor() as cursor:

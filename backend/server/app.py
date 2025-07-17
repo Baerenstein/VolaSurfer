@@ -10,6 +10,8 @@ from data.storage import StorageFactory
 from data.utils.data_schemas import OptionContract
 from data.utils.surface_helper import interpolate_surface, SurfaceType
 import asyncio
+import logging
+from decimal import Decimal
 
 
 # Add the backend directory to the sys.path
@@ -31,6 +33,9 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
 
 # Load settings and create storage instance
 settings = Settings()
@@ -141,6 +146,41 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
     finally:
         if client_connected:
             await websocket.close()
+
+@app.get("/api/v1/vol_surface/history")
+async def get_vol_surface_history(limit: int = Query(100, description="Number of surfaces to retrieve")) -> List[dict]:
+    """
+    Retrieve the last N volatility surfaces ordered by timestamp descending.
+    """
+    try:
+        if limit <= 0:
+            logging.error("Limit must be a positive integer")
+            raise HTTPException(status_code=422, detail="Limit must be a positive integer")
+
+        logging.info(f"Fetching last {limit} volatility surfaces")
+        surfaces = store.get_last_n_surfaces(limit)
+        if len(surfaces) == 0:
+            logging.warning("No volatility surfaces found")
+            return JSONResponse(status_code=404, content={"detail": "No volatility surfaces found"})
+        # Convert all Decimal objects to float for JSON serialization
+        def convert_decimal_to_float(data):
+            if isinstance(data, list):
+                return [convert_decimal_to_float(item) for item in data]
+            elif isinstance(data, dict):
+                return {k: convert_decimal_to_float(v) for k, v in data.items()}
+            elif isinstance(data, Decimal):
+                return float(data)
+            else:
+                return data
+
+        response_data = [convert_decimal_to_float(surface.to_dict()) for surface in surfaces]
+        return JSONResponse(content=response_data)
+    except HTTPException as http_exc:
+        logging.error(f"HTTP error: {http_exc.detail}")
+        raise http_exc
+    except Exception as e:
+        logging.error(f"Error retrieving surfaces: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving surfaces: {str(e)}")
 
 @app.get("/health")
 async def health_check():
