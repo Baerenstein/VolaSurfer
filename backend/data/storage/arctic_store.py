@@ -169,3 +169,7 @@ class ArcticStore(BaseStore):
             option_type=surface_data["option_type"],
             snapshot_id=metadata["snapshot_id"],
         )
+    
+    def get_available_assets(self):
+        """Get all available assets from the database - not implemented for ArcticStore"""
+        return []

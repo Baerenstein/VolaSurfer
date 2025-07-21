@@ -40,3 +40,9 @@ export interface SurfaceHistoryHookParams {
   autoRefresh?: boolean;
   refreshInterval?: number;
 }
+
+export interface Asset {
+  id: number;
+  asset_type: string;
+  ticker: string;
+}

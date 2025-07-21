@@ -434,7 +434,28 @@ class PostgresStore(BaseStore):
                 "implied_vols": implied_vols
             }
 
-    def get_last_n_surfaces(self, limit: int = 100, min_dte: Optional[int] = None, max_dte: Optional[int] = None) -> List[VolSurface]:
+    def get_available_assets(self) -> List[dict]:
+        """Get all available assets from the database"""
+        with self.conn.cursor() as cur:
+            cur.execute("""
+                SELECT DISTINCT a.id, a.asset_type, a.ticker 
+                FROM assets a
+                INNER JOIN surfaces s ON a.id = s.asset_id
+                ORDER BY a.ticker
+            """)
+            rows = cur.fetchall()
+            
+            assets = []
+            for row in rows:
+                assets.append({
+                    "id": row[0],
+                    "asset_type": row[1],
+                    "ticker": row[2]
+                })
+            
+            return assets
+
+    def get_last_n_surfaces(self, limit: int = 100, min_dte: Optional[int] = None, max_dte: Optional[int] = None, asset_id: Optional[int] = None) -> List[VolSurface]:
         """
         Retrieve the last N volatility surfaces ordered by timestamp descending.
         
@@ -442,6 +463,7 @@ class PostgresStore(BaseStore):
             limit: Number of surfaces to retrieve
             min_dte: Minimum days to expiry filter
             max_dte: Maximum days to expiry filter
+            asset_id: Asset ID to filter by
         """
         # First, get the surface IDs we want (applying the limit to surfaces, not points)
         surface_query = """
@@ -451,6 +473,11 @@ class PostgresStore(BaseStore):
         
         surface_params = []
         where_conditions = []
+        
+        # Add asset filtering
+        if asset_id is not None:
+            where_conditions.append("s.asset_id = %s")
+            surface_params.append(asset_id)
         
         # Add DTE filtering by checking if surface has points in the DTE range
         if min_dte is not None or max_dte is not None:

@@ -147,11 +147,24 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
         if client_connected:
             await websocket.close()
 
+@app.get("/api/v1/assets")
+async def get_available_assets() -> List[dict]:
+    """
+    Retrieve all available assets in the database.
+    """
+    try:
+        assets = store.get_available_assets()
+        return JSONResponse(content=assets)
+    except Exception as e:
+        logging.error(f"Error retrieving assets: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error retrieving assets: {str(e)}")
+
 @app.get("/api/v1/vol_surface/history")
 async def get_vol_surface_history(
     limit: int = Query(100, description="Number of surfaces to retrieve"),
     min_dte: Optional[int] = Query(None, description="Minimum days to expiry"),
-    max_dte: Optional[int] = Query(None, description="Maximum days to expiry")
+    max_dte: Optional[int] = Query(None, description="Maximum days to expiry"),
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
 ) -> List[dict]:
     """
     Retrieve the last N volatility surfaces ordered by timestamp descending.
@@ -161,8 +174,8 @@ async def get_vol_surface_history(
             logging.error("Limit must be a positive integer")
             raise HTTPException(status_code=422, detail="Limit must be a positive integer")
 
-        logging.info(f"Fetching last {limit} volatility surfaces with DTE filter: {min_dte}-{max_dte}")
-        surfaces = store.get_last_n_surfaces(limit, min_dte=min_dte, max_dte=max_dte)
+        logging.info(f"Fetching last {limit} volatility surfaces with DTE filter: {min_dte}-{max_dte}, asset_id: {asset_id}")
+        surfaces = store.get_last_n_surfaces(limit, min_dte=min_dte, max_dte=max_dte, asset_id=asset_id)
         
         if len(surfaces) == 0:
             logging.warning("No volatility surfaces found")

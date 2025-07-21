@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import Plot from 'react-plotly.js';
-import { useSurfaceHistory } from '../../hooks/useSurfaceHistory';
-import { HistoricalSurfaceData } from '../../types/surface';
+import { useSurfaceHistory, useAssets } from '../../hooks/useSurfaceHistory';
+import { HistoricalSurfaceData, Asset } from '../../types/surface';
 
 interface ContainerProps {
   title: string;
@@ -26,9 +26,14 @@ const HistoryPage: React.FC = () => {
   const [playbackSpeed, setPlaybackSpeed] = useState(1000);
   const [interpolationDensity, setInterpolationDensity] = useState(20); // New interpolation control
   const [isLoadingLargeDataset, setIsLoadingLargeDataset] = useState(false);
+  const [selectedAsset, setSelectedAsset] = useState<number | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   
-  const { data, isLoading, error, refetch } = useSurfaceHistory({ limit });
+  const { assets, isLoading: assetsLoading } = useAssets();
+  const { data, isLoading, error, refetch } = useSurfaceHistory({ 
+    limit, 
+    asset_id: selectedAsset 
+  });
 
   const selectedSurface = useMemo(() => {
     if (!data || data.length === 0) return null;
@@ -265,11 +270,15 @@ const HistoryPage: React.FC = () => {
     return [];
   }, [selectedSurface, showWireframe, interpolationDensity]);
 
-  const layout = useMemo(() => ({
-    title: {
-      text: `Historical Volatility Surface${selectedSurface?.spot_price ? ` - BTC $${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''} - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
-      font: { size: 16, color: 'white' }
-    },
+  const layout = useMemo(() => {
+    const currentAsset = selectedAsset ? assets.find(a => a.id === selectedAsset) : null;
+    const assetName = currentAsset?.ticker || 'All Assets';
+    
+    return {
+      title: {
+        text: `Historical Volatility Surface - ${assetName}${selectedSurface?.spot_price ? ` $${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''} - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
+        font: { size: 16, color: 'white' }
+      },
     paper_bgcolor: 'black',
     plot_bgcolor: 'black',
     scene: {
@@ -304,7 +313,8 @@ const HistoryPage: React.FC = () => {
     },
     margin: { l: 0, r: 0, b: 0, t: 40 },
     autosize: true,
-  }), [selectedSurface, selectedSurfaceIndex, data]);
+  };
+  }, [selectedSurface, selectedSurfaceIndex, data, selectedAsset, assets]);
 
   if (isLoading) {
     return (
@@ -401,6 +411,31 @@ const HistoryPage: React.FC = () => {
               <h4 className="font-medium text-white">Settings</h4>
               
               <div className="space-y-2">
+                <div>
+                  <label htmlFor="asset" className="block text-sm text-gray-300 mb-1">
+                    Asset:
+                  </label>
+                  <select
+                    id="asset"
+                    value={selectedAsset || ''}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedAsset(value ? Number(value) : null);
+                      stopPlayback();
+                      setSelectedSurfaceIndex(0);
+                    }}
+                    className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    disabled={assetsLoading}
+                  >
+                    <option value="">All Assets</option>
+                    {assets.map((asset) => (
+                      <option key={asset.id} value={asset.id}>
+                        {asset.ticker} ({asset.asset_type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
                 <div>
                   <label htmlFor="limit" className="block text-sm text-gray-300 mb-1">
                     Data Limit:
@@ -597,6 +632,7 @@ const HistoryPage: React.FC = () => {
               <div className="text-sm text-gray-300">
                 <p><strong>Frame:</strong> {selectedSurfaceIndex + 1} of {data?.length || 0}</p>
                 <p><strong>Timestamp:</strong> {new Date(selectedSurface.timestamp).toLocaleString()}</p>
+                <p><strong>Asset:</strong> {selectedAsset ? assets.find(a => a.id === selectedAsset)?.ticker || 'Unknown' : 'All Assets'}</p>
                 <p><strong>Snapshot ID:</strong> {selectedSurface.snapshot_id || 'N/A'}</p>
                 <p><strong>Asset ID:</strong> {selectedSurface.asset_id || 'N/A'}</p>
                 <p><strong>Method:</strong> {selectedSurface.method || 'N/A'}</p>

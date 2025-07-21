@@ -21,7 +21,8 @@ class Settings(BaseSettings):
 
     STORAGE: StorageConfig = StorageConfig()
 
-    MONEYNESS_RANGE: Tuple[float, float] = (0.8, 1.2)
-    DAYS_TO_EXPIRY_RANGE: Tuple[int, int] = (15, 120)
+    #TODO these are not used anywhere yet
+    MONEYNESS_RANGE: Tuple[float, float] = (0.9, 1.1)
+    DAYS_TO_EXPIRY_RANGE: Tuple[int, int] = (0, 10)
     class Config:
         env_file = ".env"

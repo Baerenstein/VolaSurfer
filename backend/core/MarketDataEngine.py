@@ -426,7 +426,7 @@ async def main():
 
     exchange_api = DeribitAPI()
     vol_engine = VolatilityEngine()
-    currency = "BTC"
+    currency = "ETH"
 
     worker = MarketDataEngine(
         exchange_api=exchange_api,

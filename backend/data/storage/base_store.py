@@ -30,3 +30,8 @@ class BaseStore(ABC):
     def get_latest_vol_surface(self):
         """Retrieve the latest surface data"""
         pass
+    
+    @abstractmethod
+    def get_available_assets(self):
+        """Get all available assets from the database"""
+        pass
