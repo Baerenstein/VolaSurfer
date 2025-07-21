@@ -3,6 +3,8 @@ from datetime import datetime, timedelta
 import pandas as pd
 import signal
 import warnings
+import argparse
+import sys
 
 from infrastructure.settings import Settings
 from data.exchanges.deribit import DeribitAPI
@@ -421,21 +423,118 @@ class MarketDataEngine:
                     break
 
 
-async def main():
-    settings = Settings()
-
-    exchange_api = DeribitAPI()
-    vol_engine = VolatilityEngine()
-    currency = "ETH"
-
-    worker = MarketDataEngine(
-        exchange_api=exchange_api,
-        vol_engine=vol_engine,
-        settings=settings,
-        currency=currency,
+def parse_arguments():
+    """Parse command line arguments for currency selection."""
+    parser = argparse.ArgumentParser(
+        description="Market Data Engine for cryptocurrency options",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  python -m core.MarketDataEngine -BTC              # Run for Bitcoin (1 min intervals)
+  python -m core.MarketDataEngine -ETH --5min       # Run for Ethereum (5 min intervals)
+  python -m core.MarketDataEngine BTC --1hr         # Run for Bitcoin (1 hour intervals)
+  python -m core.MarketDataEngine --currency BTC -i 10  # Custom 10 minute intervals
+  python -m core.MarketDataEngine -BTC --15min      # Bitcoin with 15 minute intervals
+        """
     )
+    
+    # Support multiple ways to specify currency
+    parser.add_argument(
+        'currency', 
+        nargs='?', 
+        default=None,
+        help='Currency symbol (BTC, ETH, etc.)'
+    )
+    
+    parser.add_argument(
+        '--currency', '-c',
+        dest='currency_option',
+        help='Currency symbol (alternative to positional argument)'
+    )
+    
+    parser.add_argument(
+        '--interval', '-i',
+        type=int,
+        default=None,
+        help='Update interval in minutes (default: 1)'
+    )
+    
+    # Preset interval options
+    interval_group = parser.add_mutually_exclusive_group()
+    interval_group.add_argument('--1min', action='store_const', const=1, dest='preset_interval', help='1 minute intervals')
+    interval_group.add_argument('--5min', action='store_const', const=5, dest='preset_interval', help='5 minute intervals')
+    interval_group.add_argument('--15min', action='store_const', const=15, dest='preset_interval', help='15 minute intervals')
+    interval_group.add_argument('--30min', action='store_const', const=30, dest='preset_interval', help='30 minute intervals')
+    interval_group.add_argument('--1hr', action='store_const', const=60, dest='preset_interval', help='1 hour intervals')
+    
+    # Add support for -BTC, -ETH style arguments
+    parser.add_argument('-BTC', action='store_const', const='BTC', dest='crypto_flag')
+    parser.add_argument('-ETH', action='store_const', const='ETH', dest='crypto_flag')
+    
+    args = parser.parse_args()
+    
+    # Determine currency from various argument sources
+    currency = None
+    if args.crypto_flag:
+        currency = args.crypto_flag
+    elif args.currency_option:
+        currency = args.currency_option.upper()
+    elif args.currency:
+        currency = args.currency.upper()
+    else:
+        # Default to ETH if no currency specified
+        currency = "ETH"
+        print("No currency specified, defaulting to ETH")
+    
+    # Determine interval from various sources
+    interval = None
+    if args.preset_interval:
+        interval = args.preset_interval
+    elif args.interval:
+        if args.interval < 1:
+            parser.error("Interval must be at least 1 minute")
+        elif args.interval > 1440:  # 24 hours
+            parser.error("Interval cannot exceed 1440 minutes (24 hours)")
+        interval = args.interval
+    else:
+        # Default to 1 minute if no interval specified
+        interval = 1
+    
+    return currency, interval
 
-    await worker.run(interval_minutes=1)
+async def main():
+    try:
+        currency, interval = parse_arguments()
+        interval_text = f"{interval} minute" if interval == 1 else f"{interval} minutes"
+        if interval >= 60:
+            hours = interval // 60
+            remaining_mins = interval % 60
+            if remaining_mins == 0:
+                interval_text = f"{hours} hour" if hours == 1 else f"{hours} hours"
+            else:
+                interval_text = f"{hours}h {remaining_mins}m"
+        
+        print(f"Starting Market Data Engine for {currency} with {interval_text} intervals")
+        
+        settings = Settings()
+        exchange_api = DeribitAPI()
+        vol_engine = VolatilityEngine()
+
+        worker = MarketDataEngine(
+            exchange_api=exchange_api,
+            vol_engine=vol_engine,
+            settings=settings,
+            currency=currency,
+        )
+
+        await worker.run(interval_minutes=interval)
+        
+    except KeyboardInterrupt:
+        print("\nShutdown requested by user")
+        sys.exit(0)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
