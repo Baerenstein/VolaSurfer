@@ -275,10 +275,10 @@ const HistoryPage: React.FC = () => {
     const assetName = currentAsset?.ticker || 'All Assets';
     
     return {
-      title: {
+    title: {
         text: `Historical Volatility Surface - ${assetName}${selectedSurface?.spot_price ? ` $${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''} - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
-        font: { size: 16, color: 'white' }
-      },
+      font: { size: 16, color: 'white' }
+    },
     paper_bgcolor: 'black',
     plot_bgcolor: 'black',
     scene: {

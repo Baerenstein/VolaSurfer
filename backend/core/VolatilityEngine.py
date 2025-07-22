@@ -5,6 +5,7 @@ import pandas as pd
 from scipy.interpolate import griddata
 from collections import defaultdict
 from data.utils.data_schemas import VolatilityPoint, VolSurface
+from infrastructure.utils.logging import setup_logger
 
 
 class VolPoints:
@@ -39,6 +40,7 @@ class VolatilityEngine:
         self.min_points = min_points
         self.length = length #TODO currently not used. should limit the number of surfaces stored in the dict
         self.surfaces_data: Dict[datetime, VolPoints] = {}
+        self.logger = setup_logger("volatility_engine")
 
         # self.latest_surface: Optional[VolSurface] = None
     
@@ -108,7 +110,7 @@ class VolatilityEngine:
         # print(f"Total filtered points: {len(filtered_vol_points)}")
         
         if not filtered_vol_points:
-            print("WARNING: No points found for this snapshot_id")
+            self.logger.warning(f"No volatility points found for snapshot_id: {snapshot_id}")
             return None
 
         # Sort filtered_vol_points by days_to_expiry and then by moneyness
@@ -125,11 +127,6 @@ class VolatilityEngine:
         option_types = [point.option_type for point in filtered_vol_points]
 
 
-        print("Data ranges:")
-        print(f"Strikes: {min(strikes)} to {max(strikes)}")
-        print(f"Days to expiry: {min(days_to_expiry)} to {max(days_to_expiry)}")
-        print(f"Implied vols: {min(implied_vols)} to {max(implied_vols)}")
-
         # Add after filtering points
         asset_id = filtered_vol_points[0].asset_id if filtered_vol_points else None
 
@@ -145,7 +142,7 @@ class VolatilityEngine:
             snapshot_id=snapshot_id,
             asset_id=asset_id,
         )
-        print("Successfully created VolSurface object")
+        self.logger.info(f"Created volatility surface with {len(strikes)} data points")
         return vol_surface
 
     def get_skews(self, surface: VolSurface) -> pd.DataFrame:

@@ -145,7 +145,8 @@ class MarketDataEngine:
         Raises:
             Exception: If any error occurs during processing
         """
-        self.logger.info(f"{datetime.now()}: Starting market data processing...")
+        self.logger.info("=" * 30)
+        self.logger.info("Starting market data processing...")
 
         try:
             # if not self._check_market_state():
@@ -155,7 +156,7 @@ class MarketDataEngine:
 
             self.state.last_update = datetime.now()
             self.state.error_count = 0
-            print(f"{datetime.now()}: Last update: {self.state.last_update}\n")
+            self.logger.info(f"Market data processing completed successfully")
 
         except Exception as e:
             await self._handle_error(e)
@@ -173,7 +174,7 @@ class MarketDataEngine:
         Returns:
             None
         """
-        print(f"{datetime.now()}: Starting to process currency updates\n")
+        self.logger.info(f"Processing currency updates for {self.currency}")
         last_price = await self.get_last_price()
         options_chain = self._get_options_chain()
         surface = self._get_vol_surface(options_chain)
@@ -189,14 +190,13 @@ class MarketDataEngine:
         Raises:
             ValueError: If unable to get the current price
         """
-        # print("GETTING LAST PRICE")
         try:
             current_price = self.exchange_api.get_last_price(self.currency)
             if not current_price:
                 raise ValueError(f"Could not get price for {self.currency}")
 
             self.state.last_price = current_price
-            print(f"{datetime.now()}: Last price: {self.state.last_price}")
+            self.logger.info(f"Retrieved {self.currency} last price: ${self.state.last_price:,.2f}")
             return current_price
 
         except Exception as e:
@@ -219,7 +219,7 @@ class MarketDataEngine:
                 - greeks: Delta, Gamma, Vega, Theta
                 - other market data
         """
-        print("GETTING OPTIONS CHAIN")
+        self.logger.info(f"Collecting options chain data for {len(self.state.active_instruments)} instruments")
         current_time = datetime.now()
         data_points = []
         for symbol in self.state.active_instruments:
@@ -260,11 +260,26 @@ class MarketDataEngine:
                 )
 
                 data_points.append(option)
-                options_dicts = [vars(option) for option in data_points]
-                options_chain = pd.DataFrame(options_dicts)
-                options_chain["bid_price"].fillna(0, inplace=True)
-                options_chain["ask_price"].fillna(0, inplace=True)
-                options_chain["open_interest"].fillna(0, inplace=True)
+                
+        options_dicts = [vars(option) for option in data_points]
+        options_chain = pd.DataFrame(options_dicts)
+        options_chain["bid_price"].fillna(0, inplace=True)
+        options_chain["ask_price"].fillna(0, inplace=True)
+        options_chain["open_interest"].fillna(0, inplace=True)
+
+        # Log data ranges
+        if not options_chain.empty:
+            strikes_min = options_chain['strike'].min()
+            strikes_max = options_chain['strike'].max()
+            dte_min = options_chain['days_to_expiry'].min()
+            dte_max = options_chain['days_to_expiry'].max()
+            vol_min = options_chain['implied_vol'].min()
+            vol_max = options_chain['implied_vol'].max()
+            
+            self.logger.info(f"Options chain data ranges:")
+            self.logger.info(f"  Strikes: ${strikes_min:,.0f} to ${strikes_max:,.0f}")
+            self.logger.info(f"  Days to expiry: {dte_min} to {dte_max}")
+            self.logger.info(f"  Implied vols: {vol_min:.2f}% to {vol_max:.2f}%")
 
         return options_chain
 
@@ -279,12 +294,9 @@ class MarketDataEngine:
             VolatilitySurface: Object containing the calculated volatility surface,
                               including term structure and skew information
         """
-        # print("GETTING VOL SURFACE")
-        # print(f"Option chain type: {type(option_chain)}")
-        # print(f"Option chain length: {len(option_chain) if option_chain is not None else 'None'}")
+        self.logger.info(f"Generating volatility surface from {len(option_chain)} option data points")
         
         for row in option_chain.itertuples():
-            # print(f"Processing option: {row.symbol}")
             self.vol_engine.add_market_data(
                 timestamp=row.timestamp,
                 strike=row.strike,
@@ -301,31 +313,13 @@ class MarketDataEngine:
                 asset_id=self.asset_id,
             )
 
-        # print(f"All options processed, generating surface...")
-        
-        # snapshot_id = datetime.now().isoformat()
-        # print(f"Using snapshot_id: {snapshot_id}")
         snapshot_id = self.vol_engine.get_latest_snapshot_id()
         vol_surface = self.vol_engine.get_volatility_surface(snapshot_id, self.asset_id)
-        # print(f"Vol surface generated: {vol_surface is not None}")
-        # if vol_surface:
-        #     print(f"Surface contains {len(vol_surface.strikes)} points")
-
-        # skews = self.vol_engine.get_skews(vol_surface)
-        # print(f"Skew generated: {skews is not None}")
-        # print(f"Skew contains {skews}")
-
-        # term_structure = self.vol_engine._get_term_structure(vol_surface)
-        # print(f"Term structure generated: {term_structure is not None}")
-        # print(f"Term structure contains {term_structure}")
-
-        # # get implied volatility index
-        # implied_volatility_index = self.vol_engine.get_implied_volatility_index(vol_surface)
-        # print(f"Implied volatility index generated: {implied_volatility_index}")
-
-        # surface_metrics = self.vol_engine.get_surface_metrics(vol_surface)
-        # print(f"Surface metrics generated: {surface_metrics is not None}")
-        # print(f"Surface metrics contains {surface_metrics}")
+        
+        if vol_surface:
+            self.logger.info(f"Successfully created volatility surface with {len(vol_surface.strikes)} data points")
+        else:
+            self.logger.warning("Failed to create volatility surface - insufficient data")
 
         return vol_surface
 
@@ -341,13 +335,25 @@ class MarketDataEngine:
         Returns:
             None
         """
-        print("STORING DATA")
+        self.logger.info("=" * 15 + " STORING DATA " + "=" * 15)
+        
+        # Store underlying price
         self.store.store_underlying(last_price, self.asset_type, self.currency)
-        print(f"{datetime.now()}: Underlying data stored successfully\n")
+        self.logger.info(f"Stored underlying {self.currency} price: ${last_price:,.2f}")
 
-        print(f"{datetime.now()}: Storing options chain\n")
+        # Store options chain
+        self.logger.info(f"Storing options chain with {len(options_chain)} records")
         self.store.store_options_chain(options_chain)
-        self.store.store_surface(vol_surface)
+        self.logger.info("Options chain stored successfully")
+        
+        # Store volatility surface
+        if vol_surface:
+            self.store.store_surface(vol_surface)
+            self.logger.info("Volatility surface stored successfully")
+        else:
+            self.logger.warning("No volatility surface to store")
+            
+        self.logger.info("Data storage completed")
 
     def _check_market_state(self) -> bool:
         """Check if market is in normal operating state"""
@@ -385,9 +391,18 @@ class MarketDataEngine:
         Returns:
             None
         """
-        self.logger.info(
-            f"Starting {self.currency} market data worker with {interval_minutes} minute intervals"
-        )
+        interval_text = f"{interval_minutes} minute" if interval_minutes == 1 else f"{interval_minutes} minutes"
+        if interval_minutes >= 60:
+            hours = interval_minutes // 60
+            remaining_mins = interval_minutes % 60
+            if remaining_mins == 0:
+                interval_text = f"{hours} hour" if hours == 1 else f"{hours} hours"
+            else:
+                interval_text = f"{hours}h {remaining_mins}m"
+        
+        self.logger.info("=" * 60)
+        self.logger.info(f"Starting Market Data Engine for {self.currency} with {interval_text} intervals")
+        self.logger.info("=" * 60)
 
         # Initialize instruments once at startup
         # TODO should be called only once per day
@@ -484,7 +499,6 @@ Examples:
     else:
         # Default to ETH if no currency specified
         currency = "ETH"
-        print("No currency specified, defaulting to ETH")
     
     # Determine interval from various sources
     interval = None
@@ -505,16 +519,6 @@ Examples:
 async def main():
     try:
         currency, interval = parse_arguments()
-        interval_text = f"{interval} minute" if interval == 1 else f"{interval} minutes"
-        if interval >= 60:
-            hours = interval // 60
-            remaining_mins = interval % 60
-            if remaining_mins == 0:
-                interval_text = f"{hours} hour" if hours == 1 else f"{hours} hours"
-            else:
-                interval_text = f"{hours}h {remaining_mins}m"
-        
-        print(f"Starting Market Data Engine for {currency} with {interval_text} intervals")
         
         settings = Settings()
         exchange_api = DeribitAPI()
@@ -530,10 +534,12 @@ async def main():
         await worker.run(interval_minutes=interval)
         
     except KeyboardInterrupt:
-        print("\nShutdown requested by user")
+        logger = setup_logger("market_data_main")
+        logger.info("Shutdown requested by user")
         sys.exit(0)
     except Exception as e:
-        print(f"Error: {e}")
+        logger = setup_logger("market_data_main")
+        logger.error(f"Fatal error: {e}")
         sys.exit(1)
 
 

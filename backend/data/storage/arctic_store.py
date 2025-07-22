@@ -7,6 +7,7 @@ from typing import Optional
 
 from data.storage.base_store import BaseStore
 from data.utils.data_schemas import VolSurface
+from infrastructure.utils.logging import setup_logger
 
 
 class ArcticStore(BaseStore):
@@ -15,6 +16,7 @@ class ArcticStore(BaseStore):
         self.initialize_libraries()
         self.temp_storage = defaultdict(list)
         self.last_dump_time = datetime.now()
+        self.logger = setup_logger("arctic_store")
 
     def initialize_libraries(self):
         """Initialize required libraries in ArcticDB"""
@@ -46,7 +48,7 @@ class ArcticStore(BaseStore):
         try:
             return library.read(key).data
         except Exception as e:
-            print(f"Error reading options chain for {symbol}: {e}")
+            self.logger.error(f"Error reading options chain for {symbol}: {e}")
             return None
 
     def get_underlying_data(self, symbol: str) -> pd.DataFrame:
@@ -56,7 +58,7 @@ class ArcticStore(BaseStore):
         try:
             return library.read(key).data
         except Exception as e:
-            print(f"Error reading underlying data for {symbol}: {e}")
+            self.logger.error(f"Error reading underlying data for {symbol}: {e}")
             return None
 
     def store_vol_surface(self, vol_surface: VolSurface, symbol: str) -> str:
