@@ -438,6 +438,63 @@ class MarketDataEngine:
                     break
 
 
+def display_ascii_art():
+    """Display ASCII art for VolaSurfer"""
+    ascii_art = """
+.                                                                                                                                                                                  .
+.                                                                                                 ...                                                                              .
+.                                                                                                  .                                                                               .
+.                                                                                                  .                                                                               .
+.                                                                                                  .                                                                               .
+.                                                                                                  .                                                                               .
+.                                                                                                  .                                            ..                                 .
+.                                                                                                  .                                                                               .
+.          ....  ...... .                      ..                                                  .                                                                               .
+.                ...      .   ..,;,;ccllodddxxxkkdooolc:;,'..                                      .                                                                      .......  .
+.                .       ..,cdxOKKKXXXXXXXXXKKKKKKKKKKKKK00Okdlc;'.                                .                                                         .   .              .  .
+.        ...... .;;,,,;cldOKXXKXXXKKKKKKKKK00KK0000000000OO00000Okxdl:,..                          .                                              .                             .  .
+.                .;xKKKKKKKKKK00000000000000000OOOOOOOO00OOOOkkkxxxxxkkxdoc;'.                     .                                                                            .  .
+.   ..           ...lOK00OOOO0000000000OOOOOOOOkkddxxxxxkxxxxxxdddddddooodxxxdlc;'.                .                              .                                             .  .
+.   ,;.  ...... ...  .lO0OOOOOOkkkkkkOOOOOkkkxxdooooooddodoooolllllllllccccccclodxdl:;'.           .              ..                                                            .  .
+.  .;;.          ..    'okOkxxxkxxxddxdddoooollll::ccccclllllcccccc::;;;;;;;;;;::::clodolcc:,.     ..                                                                           .  .
+.  .,;.          .       'cdxdoooolcllloollllcc:,;:;;;;:;;::::::;;;;,,,,,,,,,,,,,;;;;;;;cloodollc;,,.                                                                           .  .
+.   ,;.  ......  ..        .,clcccccc:c:::::;,,,;'.''''','',,,;;;,,,,,,,,,,,,,,,;;;;;;;;::::::codddxdc:,..                                                                      .  .
+.   ';.          .           .,cc:;,,,,;;;:;;,,'.'''..''.''',,,;;;;;;,,,;;;;;;;;;::::::::::::::lc:cclodxxol:;..                                                                 .  .
+.   .'           .              '::;,,,,',''''..'''''''''''',,,:::;;:;;;;::::::::ccccccccccclccolclcllllloodddoc;.                                                              .  .
+.  .''   ...... ...               '::,'''',,,,,,''',,',,'',,',,,;;;:::::ccccccccccccccccccllllldolooooooooddoddxxxo:.                                                           .  .
+.  .,:.          .                 .':;;,,,,',,,,,,,,;,,;,,,,,,,;;;:::cccclllllloooooooolllllldxkxxxxxxxxxxxxxxxkkkkxl,.                                                        .  .
+.  .,;.    .     .                    .,:;;;;;;;,,,;,,;;,,;;;;;;;;;::;:cccclllloooooodddddddddxxxddooooooooooooodxkO00Oko;.                                                     .  .
+.  .,:.    ....  ..                     'cl:;;;:;;;;;;;;;;;;;;;;::;;;:::::ccllllllloooooodddollolcc::ccccccc::;:::cok00KKKOo:'.                                                 .  .
+.   'c'          .                       .,lolc::::::::::ccc:cc::c:::::::::ccclllllllllllllc;;;::;::cc:;;;,;;,',,,,,;oOKKKXXXKOo;.                                              .  .
+.   ;:.   .  ..  .                         .,cddolclllllloollllllllllllllllllllllllollooc;,,,,;ccccc::::;,;;,,,,,,,',,;d0XXXXXNNX0xc.                         ..;:::::;;;;,'....,. .
+.  ...   ...... ...                           'lxxdddoodddddddddddxxdddddddddoooooooddoc;;;;:cldollcc:::;;::;;;;;;;;,,;;ckKXNNNNNNNNKx:.            ...,;clodkO0K0Okxdolc:;,'...'. .
+.                .                              .ldxddxxkkkkkkkkkkkkkkxxkkxxxxxdxxxxxoc:clloxxxxdllccccc::::::::::::;:::::lk0KXXNNWNNWNXOo,...';cldkOKXX0xdolc:,'...            .  .
+.        .  ..   .                                .,:lodxkOO0000000000OOOOOOOOOkkkkxocoxkOOOkxxxdlllllcccccccccccclcccllooddxkO0KXNNNNWWWWNKKXXNXNX0kxl;.                       .  .
+.        .. ... ...                             .   ..:odddxOO0KKKKKKXKKKKK00K000OxdkO00OOkkxxxxxddddddddddddxxxxkOOO0KKKXXXXXXKKK000Okxxdolc::;,;,...                          .  .
+.                .                                    .,lxxxxkOOO00KKXXXXXXXXXK00O0KXK0Okxxxxxxkkxddddddddoooolcllllllcc::;;;,''......                                          .  .
+.        .. ...  ..                                     .ckOOOOOOOO00KKKKXXXNKdc;,''...........'.......                                                                         .  .
+.        ................                                 ,d00KKKKKKXXXXXX0x:.                 .                                                                         ........  .
+.          ....                ...                         .,o0XXNNNNXOdl;.                    .                                                                         ........  .
+.                        .  ..  .                             .:llll:,.                        ..                                                             ........       ..... .
+.                           ..            . .....                                              .                                                   ........       .....            .
+.                                         ....                ..                               ..                                      ........        .....                       .
+.                                                         ...                                  .                             .......        ...                                    .
+.                                                         ...            . .....               .                  ......         ...                                               .
+.                            ..                                         .....                ....     ........        ...                 .','...........''.....'.....             .
+.                           .;,''''.'',;'','.',,,'.'.                                  . ....              ...                            .......'''......'.'...'''.'.             .
+.                            .               ..                                        . ...                                                                                       .
+.                                                                                                                                                                                  .
+'..................................................................................................................................................................................'
+"""
+    print(ascii_art)
+
+
+
+
+
+
+
+
 def parse_arguments():
     """Parse command line arguments for currency selection."""
     parser = argparse.ArgumentParser(
@@ -486,6 +543,9 @@ Examples:
     parser.add_argument('-BTC', action='store_const', const='BTC', dest='crypto_flag')
     parser.add_argument('-ETH', action='store_const', const='ETH', dest='crypto_flag')
     
+    # ASCII art option
+    parser.add_argument('--show-art', action='store_true', help='Display ASCII art on startup')
+    
     args = parser.parse_args()
     
     # Determine currency from various argument sources
@@ -514,11 +574,14 @@ Examples:
         # Default to 1 minute if no interval specified
         interval = 1
     
-    return currency, interval
+    return currency, interval, args.show_art
 
 async def main():
     try:
-        currency, interval = parse_arguments()
+        currency, interval, show_art = parse_arguments()
+        
+        if show_art:
+            display_ascii_art()
         
         settings = Settings()
         exchange_api = DeribitAPI()
