@@ -1,7 +1,18 @@
-import React, { useEffect, useState, useRef, useCallback, memo } from 'react';
+import React, { useEffect, useState, useRef, memo } from 'react';
 import Plot from 'react-plotly.js';
-import { useSurfaceData } from '../../hooks/useSurfaceData';
-import VolaHeatContent from '../VolHeatContent';
+import VolHeatContent from '../VolHeatContent';
+import { SurfaceData } from '../../types/surface';
+import useSurfaceData from '../../hooks/useSurfaceData';
+
+interface CacheItem {
+  timestamp: number;
+  data: SurfaceData;
+}
+
+const cache = new Map<string, CacheItem>();
+const CACHE_DURATION = 30000; // 30 seconds
+
+interface SurfacePageProps {}
 
 interface ContainerProps {
   title: string;
@@ -17,31 +28,9 @@ const Container: React.FC<ContainerProps> = ({ title, children }) => (
   </div>
 );
 
-// Memoized Plot Component
-const MemoizedPlot = memo(({ data, layout }: { data: any; layout: any }) => {
-  return (
-    <div className="overflow-hidden">
-      <Plot
-        data={data}
-        layout={layout}
-        style={{
-          width: "100%",
-          height: "50vh",
-        }}
-        config={{
-          responsive: true,
-          displayModeBar: true,
-          modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
-        }}
-      />
-    </div>
-  );
-});
-
-const SurfacePage: React.FC = () => {
+const SurfacePage: React.FC<SurfacePageProps> = memo(() => {
   const [interpolationMethod, setInterpolationMethod] = useState<'linear' | 'nearest'>('nearest');
-  const surfaceData = useSurfaceData(interpolationMethod);
-  const [shouldRender, setShouldRender] = useState(false);
+  const surfaceData = useSurfaceData('http://localhost:8000/api/v1/latest-vol-surface');
 
   // 🔥 useRef instead of useState to avoid re-renders
   const scrollingRef = useRef(false);
@@ -75,7 +64,7 @@ const SurfacePage: React.FC = () => {
 
   const stableRevisionId = useRef(`plot-${Date.now()}`);
 
-  const [layout, setLayout] = useState({
+  const layout = {
     title: {
       text: "Volatility Surface",
       font: { size: 16, color: 'white' }
@@ -115,23 +104,16 @@ const SurfacePage: React.FC = () => {
     },
     margin: { l: 0, r: 0, b: 0, t: 40 },
     uirevision: stableRevisionId.current,
-  });
-
-  // 🔥 Only re-render when both scrolling & mouseDown are inactive
-  useEffect(() => {
-    if (surfaceData.data === null || mouseDownRef.current || scrollingRef.current) {
-      setShouldRender(false);
-    } else {
-      setShouldRender(true);
-    }
-  }, [surfaceData.data]);
+  };
 
   // Update the plot data (remove the smoothing property since we're using server-side interpolation)
   const plotData = [{
-    type: 'surface',
-    x: (surfaceData.data as any)?.moneyness || [],
-    y: (surfaceData.data as any)?.daysToExpiry || [],
-    z: (surfaceData.data as any)?.impliedVols?.map((row: any) => row.map((vol: any) => vol / 100)) || [],
+    type: 'surface' as const,
+    x: surfaceData.data?.moneyness || [],
+    y: surfaceData.data?.daysToExpiry || [],
+    z: surfaceData.data?.impliedVols?.map((row: any) => 
+      Array.isArray(row) ? row.map((vol: any) => vol / 100) : vol / 100
+    ) || [],
     showscale: true,
     colorscale: 'Viridis',
     contours: {
@@ -184,19 +166,28 @@ const SurfacePage: React.FC = () => {
               </div>
             </div>
             <div className="p-4">
-              <MemoizedPlot 
+              <Plot 
                 data={plotData}
                 layout={layout}
+                style={{
+                  width: "100%",
+                  height: "50vh",
+                }}
+                config={{
+                  responsive: true,
+                  displayModeBar: true,
+                  modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
+                }}
               />
             </div>
           </div>
         </Container>
         <Container title="VolaHeat">
-          <VolaHeatContent {...surfaceData} />
+          <VolHeatContent {...surfaceData} />
         </Container>
       </div>
     </div>
   );
-};
+});
 
 export default SurfacePage;

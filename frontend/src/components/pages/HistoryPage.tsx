@@ -1,678 +1,549 @@
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import Plot from 'react-plotly.js';
-import { useSurfaceHistory, useAssets } from '../../hooks/useSurfaceHistory';
-import { HistoricalSurfaceData, Asset } from '../../types/surface';
 
-interface ContainerProps {
-  title: string;
-  children?: React.ReactNode;
-  className?: string;
+interface HistoricalSurfaceData {
+  id: number;
+  timestamp: string;
+  asset_id: number;
+  moneyness: number[];
+  daysToExpiry: number[];
+  impliedVols: number[][];
+  strikes: number[];
+  expiry_dates: string[];
+  underlying_price: number;
 }
 
-const Container: React.FC<ContainerProps> = ({ title, children, className = "flex-1" }) => (
-  <div className={`${className} m-4 bg-black border border-gray-600 rounded-lg shadow-lg`}>
-    <div className="p-6">
-      <h2 className="text-xl font-semibold mb-4 text-white">{title}</h2>
-      {children}
-    </div>
-  </div>
-);
+interface Asset {
+  id: number;
+  ticker: string;
+  asset_type: string;
+}
 
 const HistoryPage: React.FC = () => {
-  const [limit, setLimit] = useState(500); // Changed from 100 to 500
-  const [selectedSurfaceIndex, setSelectedSurfaceIndex] = useState<number>(0);
-  const [showWireframe, setShowWireframe] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [playbackSpeed, setPlaybackSpeed] = useState(1000);
-  const [interpolationDensity, setInterpolationDensity] = useState(20); // New interpolation control
-  const [isLoadingLargeDataset, setIsLoadingLargeDataset] = useState(false);
-  const [selectedAsset, setSelectedAsset] = useState<number | null>(null);
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  
-  const { assets, isLoading: assetsLoading } = useAssets();
-  const { data, isLoading, error, refetch } = useSurfaceHistory({ 
-    limit, 
-    asset_id: selectedAsset 
-  });
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<string>('');
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [isLoading, setIsLoading] = useState(false);
+  const [surfaces, setSurfaces] = useState<HistoricalSurfaceData[]>([]);
+  const [selectedSurface, setSelectedSurface] = useState<HistoricalSurfaceData | null>(null);
+  const [viewMode, setViewMode] = useState<'list' | 'comparison' | 'evolution'>('list');
+  const [comparisonSurfaces, setComparisonSurfaces] = useState<HistoricalSurfaceData[]>([]);
+  const [isLoadingLargeDataset] = useState(false);
 
-  const selectedSurface = useMemo(() => {
-    if (!data || data.length === 0) return null;
-    return data[selectedSurfaceIndex] || data[0];
-  }, [data, selectedSurfaceIndex]);
-
-  // Playback controls - FIXED to play chronologically (oldest to newest)
-  const startPlayback = () => {
-    if (!data || data.length === 0) return;
-    
-    setIsPlaying(true);
-    intervalRef.current = setInterval(() => {
-      setSelectedSurfaceIndex(prevIndex => {
-        const nextIndex = prevIndex - 1; // Changed from +1 to -1 (going backward through the array = forward in time)
-        if (nextIndex < 0) { // Changed from >= data.length to < 0
-          setIsPlaying(false);
-          return data.length - 1; // Loop back to end (oldest surface)
-        }
-        return nextIndex;
-      });
-    }, playbackSpeed);
-  };
-
-  const stopPlayback = () => {
-    setIsPlaying(false);
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-  };
-
-  const stepForward = () => {
-    stopPlayback();
-    setSelectedSurfaceIndex(prev => Math.max(prev - 1, 0)); // Changed: going backward in array = forward in time
-  };
-
-  const stepBackward = () => {
-    stopPlayback();
-    setSelectedSurfaceIndex(prev => Math.min(prev + 1, (data?.length || 1) - 1)); // Changed: going forward in array = backward in time
-  };
-
-  const resetToStart = () => {
-    stopPlayback();
-    setSelectedSurfaceIndex((data?.length || 1) - 1); // Changed: start at oldest (last index)
-  };
-
-  const goToEnd = () => {
-    stopPlayback();
-    setSelectedSurfaceIndex(0); // Changed: end at newest (first index)
-  };
-
-  // Cleanup interval on unmount
   useEffect(() => {
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current);
-      }
-    };
+    fetchAssets();
+    
+    // Set default date range (last 30 days)
+    const end = new Date();
+    const start = new Date();
+    start.setDate(start.getDate() - 30);
+    
+    setDateRange({
+      start: start.toISOString().split('T')[0],
+      end: end.toISOString().split('T')[0]
+    });
   }, []);
 
-  // Auto-update playback interval when speed changes
-  useEffect(() => {
-    if (isPlaying && intervalRef.current) {
-      // Just update the existing interval without stopping/starting
-      clearInterval(intervalRef.current);
-      intervalRef.current = setInterval(() => {
-        setSelectedSurfaceIndex(prevIndex => {
-          const nextIndex = prevIndex - 1;
-          if (nextIndex < 0) {
-            setIsPlaying(false);
-            return data?.length ? data.length - 1 : 0;
-          }
-          return nextIndex;
-        });
-      }, playbackSpeed);
-    }
-  }, [playbackSpeed, data]);
-
-  // Stop playback when we reach the end (newest surface at index 0)
-  useEffect(() => {
-    if (isPlaying && data && selectedSurfaceIndex <= 0) {
-      stopPlayback();
-    }
-  }, [selectedSurfaceIndex, data, isPlaying]);
-
-  // Enhanced plot data with better interpolation
-  const plotData = useMemo(() => {
-    if (!selectedSurface) return [];
-    
-    console.log(`Processing surface ${selectedSurfaceIndex + 1}/${data?.length || 0}:`, selectedSurface);
-    
-    if (!selectedSurface.moneyness || !selectedSurface.daysToExpiry || !selectedSurface.impliedVols) {
-      console.warn('Missing required data for plotting');
-      return [];
-    }
-
-    if (selectedSurface.moneyness.length === 0 || 
-        selectedSurface.daysToExpiry.length === 0 || 
-        selectedSurface.impliedVols.length === 0) {
-      console.warn('Empty arrays detected');
-      return [];
-    }
-    
-    // Get unique values for matrix dimensions
-    const uniqueMoneyness = [...new Set(selectedSurface.moneyness)].sort((a, b) => a - b);
-    const uniqueDaysToExpiry = [...new Set(selectedSurface.daysToExpiry)].sort((a, b) => a - b);
-    
-    console.log('Grid dimensions:', {
-      moneynessPoints: uniqueMoneyness.length,
-      dtePoints: uniqueDaysToExpiry.length,
-      totalDataPoints: selectedSurface.impliedVols.length
-    });
-    
-    if (Array.isArray(selectedSurface.impliedVols) && !Array.isArray(selectedSurface.impliedVols[0])) {
-      
-      // Create interpolated grid for smoother surface
-      const moneynessMin = Math.min(...uniqueMoneyness);
-      const moneynessMax = Math.max(...uniqueMoneyness);
-      const dteMin = Math.min(...uniqueDaysToExpiry);
-      const dteMax = Math.max(...uniqueDaysToExpiry);
-      
-      // Create denser grid for smoother interpolation
-      const gridMoneyness = Array.from({length: interpolationDensity}, (_, i) => 
-        moneynessMin + (moneynessMax - moneynessMin) * i / (interpolationDensity - 1)
-      );
-      const gridDTE = Array.from({length: Math.max(interpolationDensity, uniqueDaysToExpiry.length)}, (_, i) => 
-        dteMin + (dteMax - dteMin) * i / (Math.max(interpolationDensity, uniqueDaysToExpiry.length) - 1)
-      );
-      
-      // Create matrix with bilinear interpolation
-      const matrix: number[][] = [];
-      
-      for (let dteIdx = 0; dteIdx < gridDTE.length; dteIdx++) {
-        const currentDTE = gridDTE[dteIdx];
-        matrix[dteIdx] = [];
-        
-        for (let mIdx = 0; mIdx < gridMoneyness.length; mIdx++) {
-          const currentMoneyness = gridMoneyness[mIdx];
-          
-          // Find the interpolated value at this grid point
-          let interpolatedValue = NaN;
-          
-          // Simple nearest neighbor for now, could enhance with bilinear interpolation
-          let minDistance = Infinity;
-          for (let i = 0; i < selectedSurface.impliedVols.length; i++) {
-            const dataMoneyness = selectedSurface.moneyness[i];
-            const dataDTE = selectedSurface.daysToExpiry[i];
-            const dataVol = selectedSurface.impliedVols[i];
-            
-            if (typeof dataVol === 'number' && !isNaN(dataVol)) {
-              const distance = Math.sqrt(
-                Math.pow((currentMoneyness - dataMoneyness) / (moneynessMax - moneynessMin), 2) +
-                Math.pow((currentDTE - dataDTE) / (dteMax - dteMin), 2)
-              );
-              
-              if (distance < minDistance) {
-                minDistance = distance;
-                interpolatedValue = dataVol / 100; // Convert percentage to decimal
-              }
-            }
-          }
-          
-          // Only include values that are reasonably close
-          matrix[dteIdx][mIdx] = minDistance < 0.3 ? interpolatedValue : NaN;
-        }
+  const fetchAssets = async () => {
+    try {
+      const response = await fetch('/api/v1/assets');
+      const data = await response.json();
+      setAssets(data);
+      if (data.length > 0) {
+        setSelectedAsset(data[0].id.toString());
       }
-      
-      // Filter out rows/columns that are all NaN
-      const validMatrix = matrix.filter(row => row.some(val => !isNaN(val)));
-      
-      if (validMatrix.length === 0 || validMatrix[0].length === 0) {
-        console.warn('No valid data points found');
-        return [];
-      }
-      
-      // Calculate value range for better color scaling
-      const allValues = validMatrix.flat().filter(val => !isNaN(val));
-      const minVal = Math.min(...allValues);
-      const maxVal = Math.max(...allValues);
-      
-      return [{
-        type: 'surface' as const,
-        x: gridMoneyness,
-        y: gridDTE,
-        z: validMatrix,
-        showscale: true,
-        colorscale: 'Viridis',
-        cmin: minVal,
-        cmax: maxVal,
-        contours: {
-          z: {
-            show: true,
-            usecolormap: true,
-            highlightcolor: "#42f462",
-            project: { z: true },
-          },
-        },
-        // Enhanced surface properties for smoother rendering
-        surfacecolor: validMatrix,
-        opacity: showWireframe ? 0.7 : 0.9,
-        lighting: {
-          ambient: 0.4,
-          diffuse: 0.6,
-          fresnel: 0.2,
-          specular: 0.05,
-          roughness: 0.1,
-        },
-        lightposition: {
-          x: 100,
-          y: 200,
-          z: 0
-        },
-        hoverongaps: false,
-        hoverlabel: {
-          bgcolor: 'rgba(0,0,0,0.8)',
-          bordercolor: 'white',
-          font: { color: 'white', size: 12 }
-        },
-        hovertemplate: 
-          '<b>Moneyness:</b> %{x:.3f}<br>' +
-          '<b>Days to Expiry:</b> %{y:.1f}<br>' +
-          '<b>Implied Vol:</b> %{z:.2%}<br>' +
-          '<extra></extra>',
-        ...(showWireframe && {
-          contours: {
-            x: { show: true, color: "white", width: 2 },
-            y: { show: true, color: "white", width: 2 },
-            z: { show: true, color: "white", width: 2 },
-          }
-        }),
-      }];
+    } catch (error) {
+      console.error('Error fetching assets:', error);
     }
-    
-    return [];
-  }, [selectedSurface, showWireframe, interpolationDensity]);
-
-  const layout = useMemo(() => {
-    const currentAsset = selectedAsset ? assets.find(a => a.id === selectedAsset) : null;
-    const assetName = currentAsset?.ticker || 'All Assets';
-    
-    return {
-    title: {
-        text: `Historical Volatility Surface - ${assetName}${selectedSurface?.spot_price ? ` $${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : ''} - ${selectedSurface ? new Date(selectedSurface.timestamp).toLocaleString() : ''}`,
-      font: { size: 16, color: 'white' }
-    },
-    paper_bgcolor: 'black',
-    plot_bgcolor: 'black',
-    scene: {
-      bgcolor: 'black',
-      xaxis: {
-        title: 'Moneyness',
-        titlefont: { size: 14, color: 'white' },
-        tickfont: { size: 12, color: 'white' },
-        gridcolor: '#444444',
-        zerolinecolor: '#666666'
-      },
-      yaxis: {
-        title: 'Days to Expiry',
-        titlefont: { size: 14, color: 'white' },
-        tickfont: { size: 12, color: 'white' },
-        gridcolor: '#444444',
-        zerolinecolor: '#666666'
-      },
-      zaxis: {
-        title: 'Implied Volatility',
-        titlefont: { size: 14, color: 'white' },
-        tickfont: { size: 12, color: 'white' },
-        tickformat: '.1%',
-        range: [0, 2.6], // Fixed range: 0% to 180%
-        gridcolor: '#444444',
-        zerolinecolor: '#666666'
-      },
-      camera: {
-        eye: { x: 0.1, y: 1.5, z: 0.2 }
-      },
-      aspectmode: 'cube'
-    },
-    margin: { l: 0, r: 0, b: 0, t: 40 },
-    autosize: true,
   };
-  }, [selectedSurface, selectedSurfaceIndex, data, selectedAsset, assets]);
 
-  if (isLoading) {
+  const handleSearch = async () => {
+    if (!selectedAsset || !dateRange.start || !dateRange.end) return;
+    
+    setIsLoading(true);
+    try {
+      const params = new URLSearchParams({
+        asset_id: selectedAsset,
+        start_date: dateRange.start,
+        end_date: dateRange.end
+      });
+      
+      const response = await fetch(`/api/v1/historical-surfaces?${params}`);
+      const data = await response.json();
+      setSurfaces(data);
+      setSelectedSurface(null);
+      setComparisonSurfaces([]);
+    } catch (error) {
+      console.error('Error fetching historical surfaces:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSurfaceSelect = (surface: HistoricalSurfaceData) => {
+    if (viewMode === 'comparison') {
+      if (comparisonSurfaces.find(s => s.id === surface.id)) {
+        setComparisonSurfaces(comparisonSurfaces.filter(s => s.id !== surface.id));
+      } else if (comparisonSurfaces.length < 4) {
+        setComparisonSurfaces([...comparisonSurfaces, surface]);
+      }
+    } else {
+      setSelectedSurface(surface);
+    }
+  };
+
+  const renderSurfacePlot = (surface: HistoricalSurfaceData, title?: string, showColorBar = true) => {
+    const plotData = [{
+      type: 'surface' as const,
+      x: surface.moneyness,
+      y: surface.daysToExpiry,
+      z: surface.impliedVols,
+      colorscale: 'Viridis',
+      showscale: showColorBar,
+      colorbar: showColorBar ? {
+        title: 'Implied Vol',
+        titleside: 'right' as const
+      } : undefined
+    }];
+
+    const layout = {
+      title: {
+        text: title || `Volatility Surface - ${new Date(surface.timestamp).toLocaleDateString()}`,
+        font: { color: 'white', size: 14 }
+      },
+      scene: {
+        xaxis: { title: 'Moneyness', color: 'white' },
+        yaxis: { title: 'Days to Expiry', color: 'white' },
+        zaxis: { title: 'Implied Volatility', color: 'white' },
+        bgcolor: 'rgba(0,0,0,0)',
+        camera: {
+          eye: { x: 1.5, y: 1.5, z: 1.5 }
+        }
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: 'white' },
+      margin: { l: 0, r: 0, t: 30, b: 0 },
+      width: 500,
+      height: 400
+    };
+
     return (
-      <div className="flex flex-col w-full min-h-screen bg-black">
-        <div className="flex flex-1 p-4 justify-center items-center">
-          <div className="text-lg text-white">Loading historical data...</div>
-        </div>
+      <Plot
+        data={plotData}
+        layout={layout}
+        config={{ responsive: true, displayModeBar: false }}
+      />
+    );
+  };
+
+  const renderTimeSeriesAnalysis = () => {
+    if (surfaces.length < 2) return null;
+
+    // Calculate average implied volatility for each surface
+    const timeSeriesData = surfaces.map(surface => {
+      const flatVols = surface.impliedVols.flat().filter(v => typeof v === 'number' && !isNaN(v));
+      const avgVol = flatVols.reduce((sum, vol) => sum + vol, 0) / flatVols.length;
+      return {
+        timestamp: surface.timestamp,
+        avgVol: avgVol,
+        surface: surface
+      };
+    }).sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+    const plotData = [{
+      type: 'scatter' as const,
+      mode: 'lines+markers' as const,
+      x: timeSeriesData.map(d => d.timestamp),
+      y: timeSeriesData.map(d => d.avgVol),
+      name: 'Average Implied Volatility',
+      line: { color: '#3B82F6' },
+      marker: { size: 6 }
+    }];
+
+    const layout = {
+      title: {
+        text: 'Implied Volatility Evolution',
+        font: { color: 'white' }
+      },
+      xaxis: { 
+        title: 'Date',
+        color: 'white',
+        tickformat: '%Y-%m-%d'
+      },
+      yaxis: { 
+        title: 'Average Implied Volatility',
+        color: 'white'
+      },
+      paper_bgcolor: 'rgba(0,0,0,0)',
+      plot_bgcolor: 'rgba(0,0,0,0)',
+      font: { color: 'white' },
+      grid: { rows: 1, columns: 1 }
+    };
+
+    return (
+      <div className="mb-6">
+        <Plot
+          data={plotData}
+          layout={layout}
+          style={{ width: '100%', height: '400px' }}
+          config={{ responsive: true, displayModeBar: true }}
+        />
       </div>
     );
-  }
+  };
 
-  if (error) {
+  const renderSurfacesList = () => (
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {surfaces.map((surface) => {
+        const isSelected = viewMode === 'comparison' 
+          ? comparisonSurfaces.find(s => s.id === surface.id)
+          : selectedSurface?.id === surface.id;
+        
+        const flatVols = surface.impliedVols.flat().filter(v => typeof v === 'number' && !isNaN(v));
+        const avgVol = flatVols.length > 0 ? flatVols.reduce((sum, vol) => sum + vol, 0) / flatVols.length : 0;
+        const minVol = flatVols.length > 0 ? Math.min(...flatVols) : 0;
+        const maxVol = flatVols.length > 0 ? Math.max(...flatVols) : 0;
+        
+        return (
+          <div
+            key={surface.id}
+            onClick={() => handleSurfaceSelect(surface)}
+            className={`p-4 border rounded-lg cursor-pointer transition-all ${
+              isSelected 
+                ? 'border-blue-500 bg-blue-50' 
+                : 'border-gray-300 hover:border-gray-400 bg-white'
+            }`}
+          >
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold text-gray-800">
+                {new Date(surface.timestamp).toLocaleDateString()}
+              </h3>
+              <span className="text-sm text-gray-500">
+                {new Date(surface.timestamp).toLocaleTimeString()}
+              </span>
+            </div>
+            
+            <div className="space-y-1 text-sm text-gray-600">
+              <p>Avg Vol: {(avgVol * 100).toFixed(1)}%</p>
+              <p>Vol Range: {(minVol * 100).toFixed(1)}% - {(maxVol * 100).toFixed(1)}%</p>
+              <p>Data Points: {surface.moneyness.length * surface.daysToExpiry.length}</p>
+              <p>Underlying: ${surface.underlying_price.toFixed(2)}</p>
+            </div>
+            
+            {viewMode === 'comparison' && isSelected && (
+              <div className="mt-2 text-xs text-blue-600 font-medium">
+                ✓ Selected for comparison
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  const renderComparison = () => {
+    if (comparisonSurfaces.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-gray-400 text-6xl mb-4">📊</div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Surfaces Selected</h3>
+          <p className="text-gray-500">Select up to 4 surfaces to compare them side by side.</p>
+        </div>
+      );
+    }
+
     return (
-      <div className="flex flex-col w-full min-h-screen bg-black">
-        <div className="flex flex-1 p-4 justify-center items-center">
-          <div className="text-red-400 text-center">
-            <div className="text-lg mb-4">Error loading historical data</div>
-            <div className="text-sm mb-4">{error}</div>
-            <button 
-              onClick={refetch}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+      <div className={`grid grid-cols-1 ${comparisonSurfaces.length === 2 ? 'md:grid-cols-2' : comparisonSurfaces.length > 2 ? 'md:grid-cols-2 lg:grid-cols-2' : ''} gap-6`}>
+        {comparisonSurfaces.map((surface, index) => (
+          <div key={surface.id} className="bg-gray-800 rounded-lg p-4">
+            <div className="mb-4">
+              <h3 className="text-white font-semibold mb-2">
+                Surface {index + 1} - {new Date(surface.timestamp).toLocaleDateString()}
+              </h3>
+              <div className="grid grid-cols-2 gap-4 text-sm text-gray-300">
+                <div>
+                  <p>Timestamp: {new Date(surface.timestamp).toLocaleString()}</p>
+                  <p>Underlying: ${surface.underlying_price.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p>Strikes: {surface.moneyness.length}</p>
+                  <p>Expiries: {surface.daysToExpiry.length}</p>
+                </div>
+              </div>
+            </div>
+            {renderSurfacePlot(surface, undefined, false)}
+            <button
+              onClick={() => setComparisonSurfaces(comparisonSurfaces.filter(s => s.id !== surface.id))}
+              className="mt-2 px-3 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
             >
-              Retry
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderEvolution = () => (
+    <div>
+      {renderTimeSeriesAnalysis()}
+      {surfaces.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-lg font-semibold text-white mb-4">Surface Evolution Animation</h3>
+          <p className="text-gray-300 text-sm mb-4">
+            Click through the surfaces below to see how the volatility surface evolved over time.
+          </p>
+          
+          <div className="flex flex-wrap gap-2 mb-4">
+            {surfaces.map((surface, index) => (
+              <button
+                key={surface.id}
+                onClick={() => setSelectedSurface(surface)}
+                className={`px-3 py-1 text-xs rounded ${
+                  selectedSurface?.id === surface.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                {index + 1}. {new Date(surface.timestamp).toLocaleDateString()}
+              </button>
+            ))}
+          </div>
+          
+          {selectedSurface && (
+            <div className="bg-gray-800 rounded-lg p-6">
+              {renderSurfacePlot(selectedSurface)}
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-300">
+                <div>
+                  <p className="font-medium">Timestamp:</p>
+                  <p>{new Date(selectedSurface.timestamp).toLocaleString()}</p>
+                </div>
+                <div>
+                  <p className="font-medium">Underlying Price:</p>
+                  <p>${selectedSurface.underlying_price.toFixed(2)}</p>
+                </div>
+                <div>
+                  <p className="font-medium">Strikes:</p>
+                  <p>{selectedSurface.moneyness.length}</p>
+                </div>
+                <div>
+                  <p className="font-medium">Expiries:</p>
+                  <p>{selectedSurface.daysToExpiry.length}</p>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  const renderMainContent = () => {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          <span className="ml-3 text-white">Loading historical surfaces...</span>
+        </div>
+      );
+    }
+
+    if (surfaces.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-gray-400 text-6xl mb-4">📈</div>
+          <h3 className="text-lg font-medium text-gray-200 mb-2">No Historical Data</h3>
+          <p className="text-gray-400">Select an asset and date range to view historical volatility surfaces.</p>
+        </div>
+      );
+    }
+
+    switch (viewMode) {
+      case 'list':
+        return (
+          <div>
+            {renderSurfacesList()}
+            {selectedSurface && (
+              <div className="mt-8 bg-gray-800 rounded-lg p-6">
+                <h3 className="text-xl font-semibold text-white mb-4">
+                  Selected Surface - {new Date(selectedSurface.timestamp).toLocaleDateString()}
+                </h3>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    {renderSurfacePlot(selectedSurface)}
+                  </div>
+                  
+                  <div className="space-y-4">
+                    <div className="bg-gray-700 rounded p-4">
+                      <h4 className="font-semibold text-white mb-3">Surface Statistics</h4>
+                      <div className="space-y-2 text-sm text-gray-300">
+                        <p>Timestamp: {new Date(selectedSurface.timestamp).toLocaleString()}</p>
+                        <p>Underlying Price: ${selectedSurface.underlying_price.toFixed(2)}</p>
+                        <p>Number of Strikes: {selectedSurface.moneyness.length}</p>
+                        <p>Number of Expiries: {selectedSurface.daysToExpiry.length}</p>
+                        <p>Moneyness Range: {Math.min(...selectedSurface.moneyness).toFixed(3)} - {Math.max(...selectedSurface.moneyness).toFixed(3)}</p>
+                        <p>DTE Range: {Math.min(...selectedSurface.daysToExpiry).toFixed(1)} - {Math.max(...selectedSurface.daysToExpiry).toFixed(1)} days</p>
+                        {(() => {
+                          const flatVols = selectedSurface.impliedVols.flat().filter(v => typeof v === 'number' && !isNaN(v));
+                          const minVol = flatVols.length > 0 ? Math.min(...flatVols) : 0;
+                          const maxVol = flatVols.length > 0 ? Math.max(...flatVols) : 0;
+                          return <p>Vol Range: {(minVol * 100).toFixed(1)}% - {(maxVol * 100).toFixed(1)}%</p>;
+                        })()}
+                      </div>
+                    </div>
+                    
+                    <div className="bg-gray-700 rounded p-4">
+                      <h4 className="font-semibold text-white mb-3">Actions</h4>
+                      <div className="space-y-2">
+                        <button 
+                          onClick={() => {
+                            setViewMode('comparison');
+                            setComparisonSurfaces([selectedSurface]);
+                          }}
+                          className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
+                        >
+                          Add to Comparison
+                        </button>
+                        <button 
+                          onClick={() => {/* TODO: Export functionality */}}
+                          className="w-full px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded"
+                        >
+                          Export Data
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      
+      case 'comparison':
+        return renderComparison();
+      
+      case 'evolution':
+        return renderEvolution();
+      
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-black p-6">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-white mb-2">Historical Analysis</h1>
+          <p className="text-gray-400">Explore historical volatility surfaces and analyze evolution over time</p>
+        </div>
+
+        {/* Search Controls */}
+        <div className="bg-gray-800 rounded-lg p-6 mb-6">
+          <h3 className="text-xl font-semibold text-white mb-4">Search Parameters</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Asset</label>
+              <select
+                value={selectedAsset}
+                onChange={(e) => setSelectedAsset(e.target.value)}
+                className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+              >
+                <option value="">Select Asset</option>
+                {assets.map((asset) => (
+                  <option key={asset.id} value={asset.id.toString()}>
+                    {asset.ticker} ({asset.asset_type})
+                  </option>
+                ))}
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">Start Date</label>
+              <input
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">End Date</label>
+              <input
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+              />
+            </div>
+            
+            <div className="flex items-end">
+              <button
+                onClick={handleSearch}
+                disabled={isLoading || !selectedAsset}
+                className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white rounded transition-colors"
+              >
+                {isLoading ? 'Searching...' : 'Search'}
+              </button>
+            </div>
+          </div>
+
+          {/* View Mode Selector */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-4 py-2 rounded text-sm ${
+                viewMode === 'list' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              List View
+            </button>
+            <button
+              onClick={() => setViewMode('comparison')}
+              className={`px-4 py-2 rounded text-sm ${
+                viewMode === 'comparison' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              Comparison ({comparisonSurfaces.length}/4)
+            </button>
+            <button
+              onClick={() => setViewMode('evolution')}
+              className={`px-4 py-2 rounded text-sm ${
+                viewMode === 'evolution' 
+                  ? 'bg-blue-600 text-white' 
+                  : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+              }`}
+            >
+              Evolution
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="flex flex-col w-full min-h-screen bg-black">
-      <div className="flex flex-1 p-4">
-        <Container title="Historical Volatility Surfaces" className="flex-[3]">
-          <div className="space-y-4">
-            {isLoadingLargeDataset && isLoading && (
-              <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
-                Loading {limit} surfaces... This may take a moment for large datasets.
-              </div>
-            )}
-
-
-
-            {/* Surface Plot */}
-            {selectedSurface && plotData.length > 0 && (
-              <div className="bg-black border border-gray-600 rounded-lg shadow-lg overflow-hidden">
-                <div className="p-4">
-                  <Plot
-                    data={plotData}
-                    layout={layout}
-                    style={{
-                      width: "100%",
-                      height: "70vh",
-                    }}
-                    config={{
-                      responsive: true,
-                      displayModeBar: true,
-                      modeBarButtonsToRemove: ["toImage", "sendDataToCloud"],
-                      displaylogo: false,
-                    }}
-                    useResizeHandler={true}
-                  />
-                </div>
-              </div>
-            )}
-
-
-            
-            {/* Show debug info when no plot data */}
-            {selectedSurface && plotData.length === 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded p-4">
-                <h3 className="text-yellow-800 font-medium mb-2">No Surface Data Available</h3>
-                <div className="text-sm text-yellow-700">
-                  <p>This surface doesn't have enough data points to create a visualization.</p>
-                  <p>Surface {selectedSurfaceIndex + 1} has:</p>
-                  <ul className="ml-4 mt-2">
-                    <li>• {selectedSurface.moneyness?.length || 0} moneyness points</li>
-                    <li>• {selectedSurface.daysToExpiry?.length || 0} days to expiry points</li>
-                    <li>• {selectedSurface.impliedVols?.length || 0} implied vol points</li>
-                    <li>• {selectedSurface.daysToExpiry ? [...new Set(selectedSurface.daysToExpiry)].length : 0} unique expiries</li>
-                  </ul>
-                  <p className="mt-2">Try selecting a different surface or use the playback controls to find surfaces with more data.</p>
-                </div>
-              </div>
+        {/* Results */}
+        <div className="bg-gray-800 rounded-lg p-6">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-semibold text-white">
+              {viewMode === 'list' && 'Historical Surfaces'}
+              {viewMode === 'comparison' && 'Surface Comparison'}
+              {viewMode === 'evolution' && 'Surface Evolution'}
+            </h3>
+            {surfaces.length > 0 && (
+              <span className="text-gray-400 text-sm">
+                {surfaces.length} surface{surfaces.length !== 1 ? 's' : ''} found
+              </span>
             )}
           </div>
-        </Container>
-
-        {/* Controls */}
-        <Container title="Controls" className="flex-1">
-          <div className="space-y-4">
-            {/* Main Controls */}
-            <div className="space-y-3 p-3 bg-gray-900 border border-gray-600 rounded">
-              <h4 className="font-medium text-white">Settings</h4>
-              
-              <div className="space-y-2">
-                <div>
-                  <label htmlFor="asset" className="block text-sm text-gray-300 mb-1">
-                    Asset:
-                  </label>
-                  <select
-                    id="asset"
-                    value={selectedAsset || ''}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSelectedAsset(value ? Number(value) : null);
-                      stopPlayback();
-                      setSelectedSurfaceIndex(0);
-                    }}
-                    className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    disabled={assetsLoading}
-                  >
-                    <option value="">All Assets</option>
-                    {assets.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        {asset.ticker} ({asset.asset_type})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="limit" className="block text-sm text-gray-300 mb-1">
-                    Data Limit:
-                  </label>
-                  <select
-                    id="limit"
-                    value={limit}
-                    onChange={(e) => {
-                      const newLimit = Number(e.target.value);
-                      if (newLimit >= 2000) {
-                        const confirmed = window.confirm(
-                          `Loading ${newLimit.toLocaleString()} surfaces may take some time and use significant memory. Continue?`
-                        );
-                        if (!confirmed) return;
-                      }
-                      setLimit(newLimit);
-                      stopPlayback();
-                    }}
-                    className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={10}>10</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                    <option value={100}>100</option>
-                    <option value={200}>200</option>
-                    <option value={500}>500</option>
-                    <option value={1000}>1,000</option>
-                    <option value={2000}>2,000 ⚠️</option>
-                    <option value={5000}>5,000 ⚠️</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label htmlFor="interpolation" className="block text-sm text-gray-300 mb-1">
-                    Smoothness:
-                  </label>
-                  <select
-                    id="interpolation"
-                    value={interpolationDensity}
-                    onChange={(e) => setInterpolationDensity(Number(e.target.value))}
-                    className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={10}>Low (10x10)</option>
-                    <option value={20}>Medium (20x20)</option>
-                    <option value={30}>High (30x30)</option>
-                    <option value={50}>Ultra (50x50)</option>
-                  </select>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    id="wireframe"
-                    checked={showWireframe}
-                    onChange={(e) => setShowWireframe(e.target.checked)}
-                    className="rounded"
-                  />
-                  <label htmlFor="wireframe" className="text-sm text-gray-300">
-                    Wireframe Mode
-                  </label>
-                </div>
-
-                <button 
-                  onClick={refetch}
-                  className="w-full px-3 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600"
-                >
-                  Refresh Data
-                </button>
-              </div>
-            </div>
-
-            {/* Playback Controls */}
-            {data && data.length > 1 && (
-              <div className="space-y-3 p-3 bg-gray-900 border border-gray-600 rounded">
-                <h4 className="font-medium text-white">Timeline Playback</h4>
-                
-                {/* Control Buttons */}
-                <div className="grid grid-cols-5 gap-1">
-                  <button
-                    onClick={resetToStart}
-                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                    title="Go to oldest (start of timeline)"
-                  >
-                    ⏮
-                  </button>
-                  
-                  <button
-                    onClick={stepBackward}
-                    disabled={selectedSurfaceIndex >= data.length - 1}
-                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Step backward in time"
-                  >
-                    ⏪
-                  </button>
-                  
-                  <button
-                    onClick={isPlaying ? stopPlayback : startPlayback}
-                    className={`px-2 py-1 rounded text-xs font-medium col-span-1 ${
-                      isPlaying 
-                        ? 'bg-red-500 hover:bg-red-600 text-white' 
-                        : 'bg-green-500 hover:bg-green-600 text-white'
-                    }`}
-                  >
-                    {isPlaying ? '⏸' : '▶'}
-                  </button>
-                  
-                  <button
-                    onClick={stepForward}
-                    disabled={selectedSurfaceIndex === 0}
-                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Step forward in time"
-                  >
-                    ⏩
-                  </button>
-                  
-                  <button
-                    onClick={goToEnd}
-                    className="px-2 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600"
-                    title="Go to newest (end of timeline)"
-                  >
-                    ⏭
-                  </button>
-                </div>
-
-                {/* Timeline Slider */}
-                <div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={data.length - 1}
-                    value={data.length - 1 - selectedSurfaceIndex}
-                    onChange={(e) => {
-                      stopPlayback();
-                      setSelectedSurfaceIndex(data.length - 1 - Number(e.target.value));
-                    }}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Oldest</span>
-                    <span>Frame {data.length - selectedSurfaceIndex} of {data.length}</span>
-                    <span>Newest</span>
-                  </div>
-                </div>
-
-                {/* Speed Control */}
-                <div>
-                  <label htmlFor="speed" className="block text-sm text-gray-300 mb-1">
-                    Playback Speed:
-                  </label>
-                  <select
-                    id="speed"
-                    value={playbackSpeed}
-                    onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
-                    className="w-full px-2 py-1 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value={2000}>0.5x (2s)</option>
-                    <option value={1000}>1x (1s)</option>
-                    <option value={500}>2x (0.5s)</option>
-                    <option value={250}>4x (0.25s)</option>
-                    <option value={100}>10x (0.1s)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* Manual Surface Selection */}
-            {data && data.length > 0 && (
-              <div className="space-y-2 p-3 bg-gray-900 border border-gray-600 rounded">
-                <label htmlFor="surface-select" className="block text-sm font-medium text-gray-300">
-                  Manual Selection:
-                </label>
-                <select
-                  id="surface-select"
-                  value={selectedSurfaceIndex}
-                  onChange={(e) => {
-                    stopPlayback();
-                    setSelectedSurfaceIndex(Number(e.target.value));
-                  }}
-                  className="w-full px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  {data.map((surface, index) => (
-                    <option key={index} value={index}>
-                      {data.length - index}: {new Date(surface.timestamp).toLocaleString()}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-          </div>
-
-          {/* Surface Information */}
-          {selectedSurface ? (
-            <div className="space-y-4 mt-4">
-              <div className="text-sm text-gray-300">
-                <p><strong>Frame:</strong> {selectedSurfaceIndex + 1} of {data?.length || 0}</p>
-                <p><strong>Timestamp:</strong> {new Date(selectedSurface.timestamp).toLocaleString()}</p>
-                <p><strong>Asset:</strong> {selectedAsset ? assets.find(a => a.id === selectedAsset)?.ticker || 'Unknown' : 'All Assets'}</p>
-                <p><strong>Snapshot ID:</strong> {selectedSurface.snapshot_id || 'N/A'}</p>
-                <p><strong>Asset ID:</strong> {selectedSurface.asset_id || 'N/A'}</p>
-                <p><strong>Method:</strong> {selectedSurface.method || 'N/A'}</p>
-                <p><strong>Spot Price:</strong> {selectedSurface.spot_price ? `$${selectedSurface.spot_price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : 'N/A'}</p>
-                <p><strong>Status:</strong> {isPlaying ? '▶ Playing' : '⏸ Paused'}</p>
-              </div>
-              
-              <div className="space-y-2">
-                <h4 className="font-medium text-white">Surface Dimensions:</h4>
-                <div className="text-sm text-gray-300">
-                  <p>Total Points: {selectedSurface.moneyness?.length || 0}</p>
-                  <p>Unique Strikes: {selectedSurface.moneyness ? [...new Set(selectedSurface.moneyness)].length : 0}</p>
-                  <p>Unique Expiries: {selectedSurface.daysToExpiry ? [...new Set(selectedSurface.daysToExpiry)].length : 0}</p>
-                  {selectedSurface.moneyness && selectedSurface.moneyness.length > 0 && (
-                    <p>Moneyness Range: {Math.min(...selectedSurface.moneyness).toFixed(3)} - {Math.max(...selectedSurface.moneyness).toFixed(3)}</p>
-                  )}
-                  {selectedSurface.daysToExpiry && selectedSurface.daysToExpiry.length > 0 && (
-                    <p>DTE Range: {Math.min(...selectedSurface.daysToExpiry).toFixed(1)} - {Math.max(...selectedSurface.daysToExpiry).toFixed(1)} days</p>
-                  )}
-                  {selectedSurface.impliedVols && selectedSurface.impliedVols.length > 0 && (
-                    <p>Vol Range: {(Math.min(...selectedSurface.impliedVols.filter(v => typeof v === 'number' && !isNaN(v))) / 100).toFixed(1)}% - {(Math.max(...selectedSurface.impliedVols.filter(v => typeof v === 'number' && !isNaN(v))) / 100).toFixed(1)}%</p>
-                  )}
-                </div>
-              </div>
-
-              {data && (
-                <div className="space-y-2">
-                  <h4 className="font-medium text-white">History Overview:</h4>
-                  <div className="text-sm text-gray-300">
-                    <p>Total Surfaces: {data.length}</p>
-                    <p>Newest: {data.length > 0 ? new Date(data[0].timestamp).toLocaleString() : 'N/A'}</p> {/* Clarified which is which */}
-                    <p>Oldest: {data.length > 0 ? new Date(data[data.length - 1].timestamp).toLocaleString() : 'N/A'}</p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="text-gray-400">Select a surface to view details</div>
-          )}
-        </Container>
+          
+          {renderMainContent()}
+        </div>
       </div>
     </div>
   );
