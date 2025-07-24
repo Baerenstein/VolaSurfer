@@ -29,6 +29,12 @@ const Header: React.FC<HeaderProps> = ({ onPageChange, currentPage }) => {
           >
             History
           </button>
+          <button
+            onClick={() => onPageChange('calibration')}
+            className={`px-3 py-2 rounded ${currentPage === 'calibration' ? 'bg-blue-600' : 'hover:bg-blue-600'}`}
+          >
+            Calibration
+          </button>
         </nav>
       </div>
     </header>

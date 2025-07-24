@@ -1,85 +1,110 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { SurfaceData } from '../types/surface';
 
-const API_CONFIG = {
-  baseUrl: 'http://127.0.0.1:8000/api/v1',
-  wsBaseUrl: 'ws://127.0.0.1:8000/api/v1',
-  endpoints: {
-    volSurface: '/latest-vol-surface',
-    volSurfaceWs: '/ws/latest-vol-surface',
-  },
-  defaultHeaders: {
-    'Content-Type': 'application/json',
-  },
-};
+interface SurfaceDataState {
+  isLoading: boolean;
+  error: string | null;
+  data: SurfaceData | null;
+}
 
-export function useSurfaceData(interpolationMethod: 'linear' | 'nearest' = 'nearest') {
-  const [state, setState] = useState({
+const useSurfaceData = (url: string) => {
+  const [state, setState] = useState<SurfaceDataState>({
     isLoading: true,
     error: null,
     data: null,
   });
+  
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
-    const wsUrl = `${API_CONFIG.wsBaseUrl}${API_CONFIG.endpoints.volSurfaceWs}?method=${interpolationMethod}`;
-    console.log('Connecting to WebSocket:', wsUrl);
+    const fetchData = async () => {
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
 
-    const socket = new WebSocket(wsUrl);
-
-    socket.onopen = () => {
-      console.log('WebSocket connection established');
-      setState(prev => ({ ...prev, isLoading: true }));
-    };
-
-    socket.onmessage = (event) => {
       try {
-        const rawData = JSON.parse(event.data);
-        if (!rawData.moneyness || !rawData.days_to_expiry || !rawData.implied_vols || !rawData.timestamp) {
-          throw new Error('Missing required fields in server response');
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (!data || typeof data !== 'object') {
+          throw new Error('Invalid data format received');
         }
 
+        // Basic validation for surface data
         const surfaceData: SurfaceData = {
-          timestamp: rawData.timestamp,
-          moneyness: rawData.moneyness,
-          daysToExpiry: rawData.days_to_expiry,
-          impliedVols: rawData.implied_vols,
-          interpolationMethod: rawData.interpolation_method || 'nearest',
+          asset_id: data.asset_id || 'unknown',
+          timestamp: data.timestamp || new Date().toISOString(),
+          surface_type: data.surface_type || 'implied_volatility',
+          moneyness: Array.isArray(data.moneyness) ? data.moneyness : [],
+          daysToExpiry: Array.isArray(data.daysToExpiry) ? data.daysToExpiry : [],
+          impliedVols: Array.isArray(data.impliedVols) ? data.impliedVols : [],
+          strikes: Array.isArray(data.strikes) ? data.strikes : [],
+          expiry_dates: Array.isArray(data.expiry_dates) ? data.expiry_dates : [],
+          underlying_price: typeof data.underlying_price === 'number' ? data.underlying_price : 100,
+          bid_ask_spreads: Array.isArray(data.bid_ask_spreads) ? data.bid_ask_spreads : [],
+          delta: Array.isArray(data.delta) ? data.delta : [],
+          gamma: Array.isArray(data.gamma) ? data.gamma : [],
+          vega: Array.isArray(data.vega) ? data.vega : [],
+          theta: Array.isArray(data.theta) ? data.theta : []
         };
 
         setState({
           isLoading: false,
-          error: null,
           data: surfaceData,
+          error: null,
         });
       } catch (error) {
-        console.error('Error processing WebSocket message:', error);
         setState({
           isLoading: false,
-          error: error instanceof Error ? error.message : 'Unknown error',
           data: null,
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
       }
     };
 
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      setState({
-        isLoading: false,
-        error: 'WebSocket connection error',
-        data: null,
-      });
+    const connectWebSocket = () => {
+      try {
+        const wsUrl = url.replace(/^http/, 'ws') + '/ws';
+        wsRef.current = new WebSocket(wsUrl);
+        
+        wsRef.current.onopen = () => {
+          console.log('WebSocket connected');
+        };
+        
+        wsRef.current.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            setState(prev => ({ ...prev, data: data }));
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
+          }
+        };
+        
+        wsRef.current.onerror = () => {
+          setState(prev => ({ ...prev, error: 'WebSocket connection error' }));
+        };
+        
+        wsRef.current.onclose = () => {
+          setState(prev => ({ ...prev, error: 'WebSocket connection closed' }));
+        };
+      } catch (error) {
+        console.error('Error connecting to WebSocket:', error);
+      }
     };
 
-    socket.onclose = (event) => {
-      console.warn('WebSocket connection closed:', event);
-      setState((prev) => ({ ...prev, error: 'WebSocket connection closed' }));
-    };
+    fetchData();
+    // connectWebSocket(); // Uncomment if WebSocket is needed
 
     return () => {
-      console.log('Closing WebSocket connection');
-      socket.close();
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
     };
-  }, [interpolationMethod]);
+  }, [url]);
 
   return state;
-}
+};
+
+export default useSurfaceData;

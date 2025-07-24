@@ -599,3 +599,156 @@ class PostgresStore(BaseStore):
                 asset_id = cursor.fetchone()
             
             return asset_id[0]
+
+    def get_options_by_snapshot(self, snapshot_id: str, asset_id: str) -> pd.DataFrame:
+        """Get options data for a specific snapshot and asset"""
+        query = """
+            SELECT 
+                timestamp, strike, moneyness, expiry_date, days_to_expiry,
+                implied_vol, option_type, delta, gamma, vega, theta,
+                snapshot_id, asset_id
+            FROM options_data 
+            WHERE snapshot_id = %s AND asset_id = %s
+            ORDER BY days_to_expiry, moneyness
+        """
+        
+        try:
+            df = pd.read_sql_query(query, self.engine, params=(snapshot_id, asset_id))
+            return df
+        except Exception as e:
+            print(f"Error fetching options by snapshot: {e}")
+            return pd.DataFrame()
+
+    def get_latest_snapshot_id(self, asset_id: str) -> Optional[str]:
+        """Get the latest snapshot ID for a given asset"""
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT snapshot_id 
+                FROM options_data 
+                WHERE asset_id = %s 
+                ORDER BY timestamp DESC 
+                LIMIT 1
+            """, (asset_id,))
+            
+            result = cursor.fetchone()
+            return result[0] if result else None
+
+    def store_calibration_results(
+        self, 
+        asset_id: str, 
+        snapshot_id: str, 
+        calibration_data: dict
+    ) -> int:
+        """Store calibration results in the model_parameters table"""
+        
+        # First, get or create a model entry
+        model_id = self._get_or_create_model(calibration_data['method'])
+        
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                INSERT INTO model_parameters (
+                    model_id, asset_id, parameters, timestamp, calibration_data
+                ) VALUES (%s, %s, %s, %s, %s)
+                RETURNING id
+            """, (
+                model_id,
+                asset_id,
+                extras.Json(calibration_data['parameters']),
+                calibration_data['timestamp'],
+                extras.Json(calibration_data)
+            ))
+            
+            self.conn.commit()
+            return cursor.fetchone()[0]
+
+    def _get_or_create_model(self, method: str) -> int:
+        """Get or create a model entry for the calibration method"""
+        with self.conn.cursor() as cursor:
+            # Try to get existing model
+            cursor.execute("""
+                SELECT id FROM models WHERE model_name = %s
+            """, (method,))
+            
+            result = cursor.fetchone()
+            if result:
+                return result[0]
+            
+            # Create new model
+            cursor.execute("""
+                INSERT INTO models (model_name, model_type, description)
+                VALUES (%s, %s, %s)
+                RETURNING id
+            """, (method, 'volatility_model', f'{method.upper()} volatility model'))
+            
+            self.conn.commit()
+            return cursor.fetchone()[0]
+
+    def get_calibration_history(
+        self, 
+        asset_id: str, 
+        lookback_days: int = 30
+    ) -> List[dict]:
+        """Get calibration history for performance analysis"""
+        
+        with self.conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT 
+                    mp.timestamp,
+                    m.model_name,
+                    mp.parameters,
+                    mp.calibration_data
+                FROM model_parameters mp
+                JOIN models m ON mp.model_id = m.id
+                WHERE mp.asset_id = %s 
+                    AND mp.timestamp >= NOW() - INTERVAL '%s days'
+                ORDER BY mp.timestamp DESC
+            """, (asset_id, lookback_days))
+            
+            results = cursor.fetchall()
+            
+            calibration_history = []
+            for row in results:
+                calibration_history.append({
+                    'timestamp': row[0],
+                    'method': row[1],
+                    'parameters': row[2],
+                    'calibration_data': row[3]
+                })
+            
+            return calibration_history
+
+    def get_surface_quality_metrics(self, snapshot_id: str, asset_id: str) -> dict:
+        """Calculate surface quality metrics from options data"""
+        
+        # Get options data
+        df = self.get_options_by_snapshot(snapshot_id, asset_id)
+        
+        if df.empty:
+            return {}
+        
+        # Calculate basic quality metrics
+        total_points = len(df)
+        unique_expiries = df['days_to_expiry'].nunique()
+        unique_strikes = df['strike'].nunique()
+        
+        # Data coverage (simplified)
+        expected_points = unique_expiries * 10  # Assume 10 strikes per expiry ideal
+        data_coverage = min(total_points / expected_points, 1.0) if expected_points > 0 else 0
+        
+        # Outlier detection (simplified)
+        vol_mean = df['implied_vol'].mean()
+        vol_std = df['implied_vol'].std()
+        outliers = df[abs(df['implied_vol'] - vol_mean) > 3 * vol_std]
+        outlier_count = len(outliers)
+        
+        # Smoothness score (based on volatility variance)
+        smoothness_score = max(0, 1 - vol_std / vol_mean) if vol_mean > 0 else 0
+        
+        return {
+            'data_coverage': data_coverage,
+            'smoothness_score': smoothness_score,
+            'outlier_count': outlier_count,
+            'total_points': total_points,
+            'unique_expiries': unique_expiries,
+            'unique_strikes': unique_strikes
+        }
