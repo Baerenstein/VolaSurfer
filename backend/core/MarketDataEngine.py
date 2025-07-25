@@ -436,7 +436,7 @@ class MarketDataEngine:
                 await self._handle_error(e)
                 if self.state.error_count >= self.max_retries:
                     break
-
+j
 
 def display_ascii_art():
     """Display ASCII art for VolaSurfer"""
@@ -487,10 +487,6 @@ def display_ascii_art():
 '..................................................................................................................................................................................'
 """
     print(ascii_art)
-
-
-
-
 
 
 

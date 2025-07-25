@@ -22,6 +22,16 @@ from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from core.SurfaceCalibration import SurfaceCalibrationEngine
+from core.ModelEngine import ModelEngine
+from core.plotting import (
+    generate_surface_from_params, 
+    calculate_fit_statistics, 
+    plot_surface_comparison,
+    plot_training_history,
+    plot_parameter_distribution,
+    plot_surface_evolution,
+    PLOTTING_AVAILABLE
+)
 from data.storage import StorageFactory
 from infrastructure.settings import Settings
 from infrastructure.utils.logging import setup_logger
@@ -151,6 +161,26 @@ def parse_args():
         help='Enable verbose logging'
     )
     
+    # Plotting options
+    parser.add_argument(
+        '--plot',
+        action='store_true',
+        help='Generate surface plots and visualizations'
+    )
+    
+    parser.add_argument(
+        '--plot-limit',
+        type=int,
+        default=3,
+        help='Number of surfaces to plot (for performance)'
+    )
+    
+    parser.add_argument(
+        '--plot-dir',
+        default='./plots',
+        help='Directory to save plot files'
+    )
+    
     return parser.parse_args()
 
 
@@ -236,6 +266,11 @@ def calibrate_mode(args):
     else:
         logger.info("Starting surface calibration for all instruments...")
     
+    # Create plot directory if plotting is enabled
+    if args.plot and PLOTTING_AVAILABLE:
+        Path(args.plot_dir).mkdir(parents=True, exist_ok=True)
+        logger.info(f"Plots will be saved to {args.plot_dir}")
+    
     engine = setup_calibration_engine(args)
     
     # Load trained model
@@ -302,6 +337,66 @@ def calibrate_mode(args):
             
             logger.info(f"Surface {i+1}/{len(surfaces)}: H={params['H']:.4f}, "
                        f"nu={params['nu']:.4f}, rho={params['rho']:.4f}")
+            
+            # Generate plots if requested
+            if args.plot and PLOTTING_AVAILABLE and i < args.plot_limit:
+                try:
+                    logger.info(f"Generating plot for surface {i+1}...")
+                    
+                    # Import numpy for calculations
+                    import numpy as np
+                    
+                    # Get surface size for dimension handling
+                    surface_size = len(grid_surface)
+                    
+                    # Reshape original surface to 2D for comparison
+                    if surface_size == 44:  # Fixed grid (4 x 11)
+                        original_2d = grid_surface.reshape(len(engine.maturities), len(engine.moneyness_range))
+                    else:
+                        # For adaptive grids, use reasonable dimensions
+                        n_maturities = 7  # Most common in the logs
+                        n_moneyness = surface_size // n_maturities
+                        if surface_size % n_maturities != 0:
+                            n_maturities = int(np.sqrt(surface_size))
+                            n_moneyness = surface_size // n_maturities
+                        original_2d = grid_surface.reshape(n_maturities, n_moneyness)
+                    
+                    # Generate surface from calibrated parameters
+                    # Always use the same dimensions as the original surface
+                    n_maturities, n_moneyness = original_2d.shape
+                    # Create maturity and moneyness ranges to match the original surface
+                    maturities_adaptive = np.linspace(0.1, 1.0, n_maturities)
+                    moneyness_adaptive = np.linspace(0.8, 1.2, n_moneyness)
+                    generated_surface = generate_surface_from_params(
+                        H=params['H'],
+                        nu=params['nu'], 
+                        rho=params['rho'],
+                        maturities=maturities_adaptive,
+                        moneyness=moneyness_adaptive
+                    )
+                    
+                    # Ensure both surfaces have the same dimensions for plotting
+                    if original_2d.shape != generated_surface.shape:
+                        logger.info(f"   Reshaping generated surface from {generated_surface.shape} to {original_2d.shape}")
+                        # Resize generated surface to match original
+                        zoom_factors = (original_2d.shape[0] / generated_surface.shape[0], 
+                                      original_2d.shape[1] / generated_surface.shape[1])
+                        generated_surface = zoom(generated_surface, zoom_factors, order=1)
+                    
+                    # Calculate fit statistics
+                    stats = calculate_fit_statistics(original_2d, generated_surface)
+                    
+                    # Create plot
+                    surface_id = getattr(surface, 'id', i+1)
+                    instrument_name = args.instrument or getattr(surface, 'asset_id', 'UNKNOWN')
+                    plot_surface_comparison(
+                        original_2d, generated_surface,
+                        maturities_adaptive, moneyness_adaptive,
+                        params, stats, instrument_name, surface_id, args.plot_dir
+                    )
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to generate plot for surface {i+1}: {e}")
             
         except Exception as e:
             logger.error(f"Failed to calibrate surface {i+1}: {e}")

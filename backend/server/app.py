@@ -87,26 +87,31 @@ async def get_latest_vol_surface(
     method: SurfaceType = Query(
         SurfaceType.NEAREST,
         description="Interpolation method to use: raw, cubic, or nearest"
-    )
+    ),
+    min_moneyness: float = Query(settings.MIN_MONEYNESS, description="Minimum moneyness to include"),
+    max_moneyness: float = Query(settings.MAX_MONEYNESS, description="Maximum moneyness to include"),
+    min_maturity: int = Query(settings.MIN_MATURITY, description="Minimum days to expiry to include"),
+    max_maturity: int = Query(settings.MAX_MATURITY, description="Maximum days to expiry to include")
 ):
     """
-    Retrieve the latest volatility surface with optional interpolation.
-    
-    Args:
-        method: Interpolation method (raw, cubic, or nearest)
-    
-    Returns:
-        JSON response with surface data
+    Retrieve the latest volatility surface with optional interpolation and moneyness/maturity filtering.
     """
-    # Get raw data from store
     surface_data = store.get_latest_vol_surface()
     if surface_data is None:
         raise HTTPException(status_code=404, detail="Latest volatility surface not found")
-    
-    # Apply interpolation if requested
     try:
         interpolated_data = interpolate_surface(surface_data, method)
-        return JSONResponse(content=interpolated_data)
+        moneyness = interpolated_data["moneyness"]
+        days_to_expiry = interpolated_data["days_to_expiry"]
+        mask = [
+            (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
+            for m, dte in zip(moneyness, days_to_expiry)
+        ]
+        filtered = {
+            k: [v[i] for i in range(len(moneyness)) if mask[i]] if isinstance(v, list) and len(v) == len(moneyness) else v
+            for k, v in interpolated_data.items()
+        }
+        return JSONResponse(content=filtered)
     except Exception as e:
         raise HTTPException(
             status_code=500,
@@ -118,26 +123,35 @@ async def get_latest_vol_surface(
 @app.websocket("/api/v1/ws/latest-vol-surface")
 async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
-
     params = websocket.query_params
-    method = params.get("method")  # Removed default value to make it truly dependent on the query
-
-    if method.upper() not in SurfaceType.__members__:
+    method = params.get("method")
+    min_moneyness = float(params.get("min_moneyness", settings.MIN_MONEYNESS))
+    max_moneyness = float(params.get("max_moneyness", settings.MAX_MONEYNESS))
+    min_maturity = int(params.get("min_maturity", settings.MIN_MATURITY))
+    max_maturity = int(params.get("max_maturity", settings.MAX_MATURITY))
+    if method is None or method.upper() not in SurfaceType.__members__:
         await websocket.send_json({"error": "Invalid interpolation method"})
         await websocket.close()
         return
-
     method = SurfaceType.__members__[method.upper()]
-
     client_connected = True
     try:
         while True:
-            # Here you would typically fetch the latest surface data
             surface_data = store.get_latest_vol_surface()
             interpolated_data = interpolate_surface(surface_data, method)
+            moneyness = interpolated_data["moneyness"]
+            days_to_expiry = interpolated_data["days_to_expiry"]
+            mask = [
+                (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
+                for m, dte in zip(moneyness, days_to_expiry)
+            ]
+            filtered = {
+                k: [v[i] for i in range(len(moneyness)) if mask[i]] if isinstance(v, list) and len(v) == len(moneyness) else v
+                for k, v in interpolated_data.items()
+            }
             if surface_data is not None:
-                await websocket.send_json(interpolated_data)
-            await asyncio.sleep(5)  # Adjust the frequency of updates as needed
+                await websocket.send_json(filtered)
+            await asyncio.sleep(5)
     except WebSocketDisconnect:
         print("Client disconnected")
         client_connected = False
@@ -164,24 +178,24 @@ async def get_vol_surface_history(
     limit: int = Query(100, description="Number of surfaces to retrieve"),
     min_dte: Optional[int] = Query(None, description="Minimum days to expiry"),
     max_dte: Optional[int] = Query(None, description="Maximum days to expiry"),
-    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by"),
+    min_moneyness: float = Query(settings.MIN_MONEYNESS, description="Minimum moneyness to include"),
+    max_moneyness: float = Query(settings.MAX_MONEYNESS, description="Maximum moneyness to include"),
+    min_maturity: int = Query(settings.MIN_MATURITY, description="Minimum days to expiry to include"),
+    max_maturity: int = Query(settings.MAX_MATURITY, description="Maximum days to expiry to include")
 ) -> List[dict]:
     """
-    Retrieve the last N volatility surfaces ordered by timestamp descending.
+    Retrieve the last N volatility surfaces ordered by timestamp descending, with optional moneyness/maturity filtering.
     """
     try:
         if limit <= 0:
             logging.error("Limit must be a positive integer")
             raise HTTPException(status_code=422, detail="Limit must be a positive integer")
-
         logging.info(f"Fetching last {limit} volatility surfaces with DTE filter: {min_dte}-{max_dte}, asset_id: {asset_id}")
         surfaces = store.get_last_n_surfaces(limit, min_dte=min_dte, max_dte=max_dte, asset_id=asset_id)
-        
         if len(surfaces) == 0:
             logging.warning("No volatility surfaces found")
             return JSONResponse(status_code=404, content={"detail": "No volatility surfaces found"})
-            
-        # Convert all Decimal objects to float for JSON serialization
         def convert_decimal_to_float(data):
             if isinstance(data, list):
                 return [convert_decimal_to_float(item) for item in data]
@@ -191,8 +205,19 @@ async def get_vol_surface_history(
                 return float(data)
             else:
                 return data
-
-        response_data = [convert_decimal_to_float(surface.to_dict()) for surface in surfaces]
+        response_data = []
+        for surface in surfaces:
+            d = surface.to_dict()
+            moneyness = d.get("moneyness", [])
+            days_to_expiry = d.get("days_to_expiry", [])
+            mask = [
+                (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
+                for m, dte in zip(moneyness, days_to_expiry)
+            ]
+            for k in ["moneyness", "strikes", "maturities", "days_to_expiry", "implied_vols", "option_type"]:
+                if k in d and isinstance(d[k], list) and len(d[k]) == len(moneyness):
+                    d[k] = [d[k][i] for i in range(len(moneyness)) if mask[i]]
+            response_data.append(convert_decimal_to_float(d))
         return JSONResponse(content=response_data)
     except HTTPException as http_exc:
         logging.error(f"HTTP error: {http_exc.detail}")

@@ -40,7 +40,11 @@ const MemoizedPlot = memo(({ data, layout }: { data: any; layout: any }) => {
 
 const SurfacePage: React.FC = () => {
   const [interpolationMethod, setInterpolationMethod] = useState<'linear' | 'nearest'>('nearest');
-  const surfaceData = useSurfaceData(interpolationMethod);
+  const [minMoneyness, setMinMoneyness] = useState(0.8);
+  const [maxMoneyness, setMaxMoneyness] = useState(1.3);
+  const [minMaturity, setMinMaturity] = useState(0);
+  const [maxMaturity, setMaxMaturity] = useState(30);
+  const surfaceData = useSurfaceData(interpolationMethod, minMoneyness, maxMoneyness, minMaturity, maxMaturity);
   const [shouldRender, setShouldRender] = useState(false);
 
   // 🔥 useRef instead of useState to avoid re-renders
@@ -180,6 +184,50 @@ const SurfacePage: React.FC = () => {
                     <option value="nearest">Nearest</option>
                     <option value="linear">Linear</option>
                   </select>
+                  <label htmlFor="min-moneyness" className="text-sm text-gray-300 ml-4">Min M:</label>
+                  <input
+                    id="min-moneyness"
+                    type="number"
+                    step="0.01"
+                    min={0}
+                    max={maxMoneyness}
+                    value={minMoneyness}
+                    onChange={e => setMinMoneyness(Number(e.target.value))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none"
+                  />
+                  <label htmlFor="max-moneyness" className="text-sm text-gray-300 ml-2">Max M:</label>
+                  <input
+                    id="max-moneyness"
+                    type="number"
+                    step="0.01"
+                    min={minMoneyness}
+                    max={2}
+                    value={maxMoneyness}
+                    onChange={e => setMaxMoneyness(Number(e.target.value))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none"
+                  />
+                  <label htmlFor="min-maturity" className="text-sm text-gray-300 ml-4">Min DTE:</label>
+                  <input
+                    id="min-maturity"
+                    type="number"
+                    step="1"
+                    min={0}
+                    max={maxMaturity}
+                    value={minMaturity}
+                    onChange={e => setMinMaturity(Number(e.target.value))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none"
+                  />
+                  <label htmlFor="max-maturity" className="text-sm text-gray-300 ml-2">Max DTE:</label>
+                  <input
+                    id="max-maturity"
+                    type="number"
+                    step="1"
+                    min={minMaturity}
+                    max={365}
+                    value={maxMaturity}
+                    onChange={e => setMaxMaturity(Number(e.target.value))}
+                    className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm focus:outline-none"
+                  />
                 </div>
               </div>
             </div>

@@ -20,6 +20,15 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from core.SurfaceCalibration import SurfaceCalibrationEngine
 from core.ModelEngine import rBergomi
+from core.plotting import (
+    generate_surface_from_params as unified_generate_surface,
+    calculate_fit_statistics as unified_calculate_stats,
+    plot_surface_comparison as unified_plot_comparison,
+    plot_training_history,
+    plot_parameter_distribution,
+    plot_surface_evolution,
+    PLOTTING_AVAILABLE
+)
 from data.storage import StorageFactory
 from infrastructure.settings import Settings
 from infrastructure.utils.logging import setup_logger
@@ -285,8 +294,8 @@ def main():
     settings = Settings()
     store = StorageFactory.create_storage(settings)
     
-    # Example: Calibrate for ETH (change to your instrument)
-    instrument = "ETH"  # Change this to your instrument ticker
+    # Example: Calibrate for BTC (change to your instrument)
+    instrument = "BTC"  # Change this to your instrument ticker
     
     # Initialize calibration engine
     engine = SurfaceCalibrationEngine(
@@ -385,10 +394,10 @@ def main():
             # Get surface size for dimension handling
             surface_size = len(grid_surface)
             
-            # Generate surface from calibrated parameters
+            # Generate surface from calibrated parameters using unified function
             # Use the same dimensions as the original surface
             if surface_size == 44:  # Fixed grid
-                generated_surface = generate_surface_from_params(
+                generated_surface = unified_generate_surface(
                     H=params['H'],
                     nu=params['nu'], 
                     rho=params['rho'],
@@ -409,7 +418,7 @@ def main():
                 adaptive_maturities = np.linspace(0.1, 1.0, n_maturities)
                 adaptive_moneyness = np.linspace(0.8, 1.2, n_moneyness)
                 
-                generated_surface = generate_surface_from_params(
+                generated_surface = unified_generate_surface(
                     H=params['H'],
                     nu=params['nu'], 
                     rho=params['rho'],
@@ -440,8 +449,8 @@ def main():
                 
                 original_2d = grid_surface.reshape(n_maturities, n_moneyness)
             
-            # Calculate fit statistics
-            stats = calculate_fit_statistics(original_2d, generated_surface)
+            # Calculate fit statistics using unified function
+            stats = unified_calculate_stats(original_2d, generated_surface)
             fit_statistics.append(stats)
             
             print(f"   Fit Quality: R²={stats['r_squared']:.4f}, RMSE={stats['rmse']:.4f}")
@@ -471,10 +480,11 @@ def main():
                     plot_maturities = np.linspace(0.1, 1.0, original_2d.shape[0])
                     plot_moneyness = np.linspace(0.8, 1.2, original_2d.shape[1])
                 
-                plot_surface_comparison(
+                # Use unified plotting function
+                unified_plot_comparison(
                     original_2d, generated_surface,
                     plot_maturities, plot_moneyness,
-                    params, stats, instrument
+                    params, stats, instrument, i+1, "./"
                 )
             
         except Exception as e:

@@ -22,7 +22,11 @@ class Settings(BaseSettings):
     STORAGE: StorageConfig = StorageConfig()
 
     #TODO these are not used anywhere yet
-    MONEYNESS_RANGE: Tuple[float, float] = (0.9, 1.1)
-    DAYS_TO_EXPIRY_RANGE: Tuple[int, int] = (0, 10)
+    # Default moneyness range for surface filtering
+    MIN_MONEYNESS: float = 0.6
+    MAX_MONEYNESS: float = 1.4
+    # Default maturity (days to expiry) range for surface filtering
+    MIN_MATURITY: int = 0
+    MAX_MATURITY: int = 30
     class Config:
         env_file = ".env"

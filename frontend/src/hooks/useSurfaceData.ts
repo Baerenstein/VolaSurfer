@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SurfaceData } from '../types/surface';
+import { SurfaceData, SurfaceState } from '../types/surface';
 
 const API_CONFIG = {
   baseUrl: 'http://127.0.0.1:8000/api/v1',
@@ -13,15 +13,21 @@ const API_CONFIG = {
   },
 };
 
-export function useSurfaceData(interpolationMethod: 'linear' | 'nearest' = 'nearest') {
-  const [state, setState] = useState({
+export function useSurfaceData(
+  interpolationMethod: 'linear' | 'nearest' = 'nearest',
+  minMoneyness: number = 0.8,
+  maxMoneyness: number = 1.3,
+  minMaturity: number = 0,
+  maxMaturity: number = 30
+) {
+  const [state, setState] = useState<SurfaceState>({
     isLoading: true,
     error: null,
     data: null,
   });
 
   useEffect(() => {
-    const wsUrl = `${API_CONFIG.wsBaseUrl}${API_CONFIG.endpoints.volSurfaceWs}?method=${interpolationMethod}`;
+    const wsUrl = `${API_CONFIG.wsBaseUrl}${API_CONFIG.endpoints.volSurfaceWs}?method=${interpolationMethod}&min_moneyness=${minMoneyness}&max_moneyness=${maxMoneyness}&min_maturity=${minMaturity}&max_maturity=${maxMaturity}`;
     console.log('Connecting to WebSocket:', wsUrl);
 
     const socket = new WebSocket(wsUrl);
@@ -79,7 +85,7 @@ export function useSurfaceData(interpolationMethod: 'linear' | 'nearest' = 'near
       console.log('Closing WebSocket connection');
       socket.close();
     };
-  }, [interpolationMethod]);
+  }, [interpolationMethod, minMoneyness, maxMoneyness, minMaturity, maxMaturity]);
 
   return state;
 }
