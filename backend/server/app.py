@@ -118,8 +118,6 @@ async def get_latest_vol_surface(
             detail=f"Error interpolating surface: {str(e)}"
         )
 
-
-
 @app.websocket("/api/v1/ws/latest-vol-surface")
 async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
@@ -234,4 +232,177 @@ async def health_check():
         "timestamp": datetime.now().isoformat(),
         "version": app.version,
     }
+
+
+# WebGL Wallpaper API Endpoints
+@app.get("/api/surface_snapshot")
+async def get_surface_snapshot():
+    """
+    Returns historical surface data in x, y, z format for WebGL rendering.
+    """
+    try:
+        surface_data = store.get_latest_vol_surface()
+        if surface_data is None:
+            raise HTTPException(status_code=404, detail="No surface data available")
+        
+        # Convert to x, y, z format for WebGL
+        interpolated_data = interpolate_surface(surface_data, SurfaceType.LINEAR)
+        
+        # Create x, y, z coordinates
+        x_coords = []
+        y_coords = []
+        z_coords = []
+        
+        # Handle 2D array structure from interpolation
+        if isinstance(interpolated_data["implied_vols"], list) and len(interpolated_data["implied_vols"]) > 0:
+            if isinstance(interpolated_data["implied_vols"][0], list):
+                # 2D array structure
+                for j, dte in enumerate(interpolated_data["days_to_expiry"]):
+                    for i, moneyness in enumerate(interpolated_data["moneyness"]):
+                        if i < len(interpolated_data["implied_vols"][j]):
+                            vol = interpolated_data["implied_vols"][j][i]
+                            if vol is not None:
+                                x_coords.append(float(moneyness))
+                                y_coords.append(float(dte))
+                                z_coords.append(float(vol))
+            else:
+                # 1D array structure
+                for i, moneyness in enumerate(interpolated_data["moneyness"]):
+                    for j, dte in enumerate(interpolated_data["days_to_expiry"]):
+                        vol_index = j * len(interpolated_data["moneyness"]) + i
+                        if vol_index < len(interpolated_data["implied_vols"]):
+                            vol = interpolated_data["implied_vols"][vol_index]
+                            if vol is not None:
+                                x_coords.append(float(moneyness))
+                                y_coords.append(float(dte))
+                                z_coords.append(float(vol))
+        
+        return {
+            "x": x_coords,
+            "y": y_coords,
+            "z": z_coords,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logging.error(f"Error getting surface snapshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting surface snapshot: {str(e)}")
+
+
+@app.get("/api/trendline")
+async def get_trendline(limit: int = Query(100, description="Number of historical points")):
+    """
+    Returns historical price/volatility trend line data.
+    """
+    try:
+        surfaces = store.get_last_n_surfaces(limit)
+        if not surfaces:
+            raise HTTPException(status_code=404, detail="No historical data available")
+        
+        trend_data = []
+        for i, surface in enumerate(surfaces):
+            if surface.implied_vols and len(surface.implied_vols) > 0:
+                avg_vol = sum(float(vol) for vol in surface.implied_vols) / len(surface.implied_vols)
+                trend_data.append({
+                    "time": i,  # Index as time proxy
+                    "price": float(avg_vol),  # Average volatility as price proxy
+                    "timestamp": surface.timestamp.isoformat() if surface.timestamp else None
+                })
+        
+        return {
+            "trendline": trend_data,
+            "count": len(trend_data)
+        }
+    except Exception as e:
+        logging.error(f"Error getting trendline: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting trendline: {str(e)}")
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """
+    Returns latest spread, volume, and timestamp statistics.
+    """
+    try:
+        surface_data = store.get_latest_vol_surface()
+        if surface_data is None:
+            raise HTTPException(status_code=404, detail="No surface data available")
+        
+        interpolated_data = interpolate_surface(surface_data, SurfaceType.LINEAR)
+        
+        if not interpolated_data["implied_vols"]:
+            raise HTTPException(status_code=404, detail="No volatility data available")
+        
+        # Handle the case where implied_vols is a 2D array from interpolation
+        if isinstance(interpolated_data["implied_vols"], list) and len(interpolated_data["implied_vols"]) > 0:
+            if isinstance(interpolated_data["implied_vols"][0], list):
+                # 2D array - flatten it
+                vols = []
+                for row in interpolated_data["implied_vols"]:
+                    for vol in row:
+                        if vol is not None:
+                            vols.append(float(vol))
+            else:
+                # 1D array
+                vols = [float(v) for v in interpolated_data["implied_vols"] if v is not None]
+        else:
+            vols = []
+        
+        if not vols:
+            raise HTTPException(status_code=404, detail="No valid volatility data available")
+        
+        max_vol = max(vols)
+        min_vol = min(vols)
+        spread = (max_vol - min_vol) * 100  # Convert to percentage
+        
+        volume = len(vols)  # Number of data points as volume proxy
+        
+        return {
+            "spread": round(spread, 2),
+            "volume": volume,
+            "timestamp": datetime.now().isoformat(),
+            "max_vol": round(max_vol * 100, 2),
+            "min_vol": round(min_vol * 100, 2),
+            "avg_vol": round(sum(vols) / len(vols) * 100, 2)
+        }
+    except Exception as e:
+        logging.error(f"Error getting stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")
+
+
+@app.websocket("/api/stream")
+async def websocket_stream(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time updates.
+    """
+    await websocket.accept()
+    client_connected = True
+    
+    try:
+        while client_connected:
+            # Send surface snapshot
+            surface_data = await get_surface_snapshot()
+            await websocket.send_json({
+                "type": "surface_snapshot",
+                "data": surface_data
+            })
+            
+            # Send stats
+            stats_data = await get_stats()
+            await websocket.send_json({
+                "type": "stats",
+                "data": stats_data
+            })
+            
+            # Wait 5 seconds before next update
+            await asyncio.sleep(5)
+            
+    except WebSocketDisconnect:
+        print("WebSocket client disconnected")
+        client_connected = False
+    except Exception as e:
+        print(f"Error in WebSocket stream: {str(e)}")
+        client_connected = False
+    finally:
+        if client_connected:
+            await websocket.close()
 

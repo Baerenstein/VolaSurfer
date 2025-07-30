@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VolaSurfer WebGL Wallpaper - Test Mode</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- WebGL Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+    
+    <!-- Overlay UI -->
+    <div id="overlay">
+        <div class="overlay-content">
+            <div class="time-display" id="time-display">
+                <span id="current-time">--:--:--</span>
+                <div style="font-size: 12px; color: #ff8800; margin-top: 5px;">TEST MODE</div>
+            </div>
+            
+            <div class="stats-container">
+                <div class="stat-item">
+                    <span class="stat-label">Spread</span>
+                    <span class="stat-value" id="spread-value">15.23%</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Volume</span>
+                    <span class="stat-value" id="volume-value">1,247</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Last Update</span>
+                    <span class="stat-value" id="last-update">--</span>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="toggle-animation" class="control-btn">Pause</button>
+                <button id="reset-camera" class="control-btn">Reset View</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Loading Test Data...</p>
+        </div>
+    </div>
+    
+    <script>
+        // Test version of the VolaSurfer Wallpaper with mock data
+        class VolaSurferWallpaperTest {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.surfaceMesh = null;
+                this.trendline = null;
+                this.animationId = null;
+                this.isAnimating = true;
+                
+                this.init();
+            }
+            
+            async init() {
+                try {
+                    this.setupThreeJS();
+                    this.setupEventListeners();
+                    this.startTimeUpdate();
+                    this.createMockData();
+                    this.hideLoading();
+                    this.animate();
+                } catch (error) {
+                    console.error('Initialization error:', error);
+                    this.showError('Failed to initialize Test Wallpaper');
+                }
+            }
+            
+            setupThreeJS() {
+                const canvas = document.getElementById('webgl-canvas');
+                
+                // Scene
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x000011);
+                
+                // Camera
+                const aspect = window.innerWidth / window.innerHeight;
+                this.camera = new THREE.PerspectiveCamera(75, aspect, 0.1, 1000);
+                this.camera.position.set(5, 5, 5);
+                this.camera.lookAt(0, 0, 0);
+                
+                // Renderer
+                this.renderer = new THREE.WebGLRenderer({ 
+                    canvas: canvas,
+                    antialias: true,
+                    alpha: true
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setPixelRatio(window.devicePixelRatio);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                // Lighting
+                this.setupLighting();
+                
+                // Grid helper
+                const gridHelper = new THREE.GridHelper(10, 10, 0x444444, 0x222222);
+                this.scene.add(gridHelper);
+                
+                // Handle window resize
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+            
+            setupLighting() {
+                // Ambient light
+                const ambientLight = new THREE.AmbientLight(0x404040, 0.3);
+                this.scene.add(ambientLight);
+                
+                // Directional light
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(10, 10, 5);
+                directionalLight.castShadow = true;
+                this.scene.add(directionalLight);
+                
+                // Point light for dramatic effect
+                const pointLight = new THREE.PointLight(0x00ff88, 0.5, 20);
+                pointLight.position.set(0, 5, 0);
+                this.scene.add(pointLight);
+            }
+            
+            setupEventListeners() {
+                // Control buttons
+                document.getElementById('toggle-animation').addEventListener('click', () => {
+                    this.toggleAnimation();
+                });
+                
+                document.getElementById('reset-camera').addEventListener('click', () => {
+                    this.resetCamera();
+                });
+                
+                // Mouse controls for camera
+                let isMouseDown = false;
+                let mouseX = 0;
+                let mouseY = 0;
+                
+                document.addEventListener('mousedown', (event) => {
+                    isMouseDown = true;
+                    mouseX = event.clientX;
+                    mouseY = event.clientY;
+                });
+                
+                document.addEventListener('mouseup', () => {
+                    isMouseDown = false;
+                });
+                
+                document.addEventListener('mousemove', (event) => {
+                    if (isMouseDown) {
+                        const deltaX = event.clientX - mouseX;
+                        const deltaY = event.clientY - mouseY;
+                        
+                        // Rotate camera around the scene
+                        const spherical = new THREE.Spherical();
+                        spherical.setFromVector3(this.camera.position);
+                        spherical.theta -= deltaX * 0.01;
+                        spherical.phi += deltaY * 0.01;
+                        spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, spherical.phi));
+                        
+                        this.camera.position.setFromSpherical(spherical);
+                        this.camera.lookAt(0, 0, 0);
+                        
+                        mouseX = event.clientX;
+                        mouseY = event.clientY;
+                    }
+                });
+                
+                // Mouse wheel for zoom
+                document.addEventListener('wheel', (event) => {
+                    const zoomSpeed = 0.1;
+                    const direction = event.deltaY > 0 ? 1 : -1;
+                    const distance = this.camera.position.length();
+                    const newDistance = Math.max(2, Math.min(20, distance + direction * zoomSpeed));
+                    
+                    this.camera.position.normalize().multiplyScalar(newDistance);
+                });
+            }
+            
+            createMockData() {
+                // Create mock surface data
+                const mockSurfaceData = {
+                    moneyness: Array.from({length: 20}, (_, i) => 0.5 + i * 0.1),
+                    days_to_expiry: Array.from({length: 15}, (_, i) => 7 + i * 7),
+                    implied_vols: []
+                };
+                
+                // Generate realistic volatility data
+                for (let dte of mockSurfaceData.days_to_expiry) {
+                    for (let moneyness of mockSurfaceData.moneyness) {
+                        // Create a realistic volatility smile
+                        const atmVol = 0.3 + Math.sin(Date.now() * 0.001) * 0.05;
+                        const smile = Math.exp(-Math.pow(moneyness - 1, 2) * 2);
+                        const term = Math.exp(-dte / 365 * 0.5);
+                        const vol = atmVol * (0.8 + 0.4 * smile) * (0.9 + 0.2 * term);
+                        mockSurfaceData.implied_vols.push(vol);
+                    }
+                }
+                
+                this.createSurfaceMesh(mockSurfaceData);
+                this.createMockTrendline();
+                this.updateStats(mockSurfaceData);
+            }
+            
+            createSurfaceMesh(surfaceData) {
+                // Remove existing surface mesh
+                if (this.surfaceMesh) {
+                    this.scene.remove(this.surfaceMesh);
+                }
+                
+                const { moneyness, days_to_expiry, implied_vols } = surfaceData;
+                
+                // Create geometry
+                const geometry = new THREE.PlaneGeometry(8, 8, 50, 50);
+                const vertices = geometry.attributes.position.array;
+                
+                // Map surface data to geometry
+                for (let i = 0; i < vertices.length; i += 3) {
+                    const x = vertices[i];
+                    const y = vertices[i + 1];
+                    
+                    // Map x,y to moneyness and days_to_expiry
+                    const moneynessIndex = Math.floor((x + 4) / 8 * (moneyness.length - 1));
+                    const dteIndex = Math.floor((y + 4) / 8 * (days_to_expiry.length - 1));
+                    
+                    if (moneynessIndex >= 0 && moneynessIndex < moneyness.length &&
+                        dteIndex >= 0 && dteIndex < days_to_expiry.length) {
+                        
+                        const volIndex = dteIndex * moneyness.length + moneynessIndex;
+                        if (volIndex < implied_vols.length) {
+                            const vol = implied_vols[volIndex];
+                            vertices[i + 2] = vol * 2; // Scale volatility for visual effect
+                        }
+                    }
+                }
+                
+                geometry.attributes.position.needsUpdate = true;
+                geometry.computeVertexNormals();
+                
+                // Create material with gradient colors
+                const material = new THREE.MeshPhongMaterial({
+                    color: 0x00ff88,
+                    transparent: true,
+                    opacity: 0.8,
+                    wireframe: false,
+                    side: THREE.DoubleSide
+                });
+                
+                // Create mesh
+                this.surfaceMesh = new THREE.Mesh(geometry, material);
+                this.surfaceMesh.rotation.x = -Math.PI / 2;
+                this.surfaceMesh.castShadow = true;
+                this.surfaceMesh.receiveShadow = true;
+                
+                this.scene.add(this.surfaceMesh);
+            }
+            
+            createMockTrendline() {
+                // Remove existing trendline
+                if (this.trendline) {
+                    this.scene.remove(this.trendline);
+                }
+                
+                // Create mock trendline points
+                const points = [];
+                for (let i = 0; i < 50; i++) {
+                    const time = (i / 50) * 8 - 4;
+                    const volatility = 0.25 + Math.sin(i * 0.2) * 0.1 + Math.random() * 0.05;
+                    points.push(new THREE.Vector3(time, volatility * 2, 0));
+                }
+                
+                if (points.length > 1) {
+                    const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                    const material = new THREE.LineBasicMaterial({ 
+                        color: 0xff8800,
+                        linewidth: 3
+                    });
+                    
+                    this.trendline = new THREE.Line(geometry, material);
+                    this.scene.add(this.trendline);
+                }
+            }
+            
+            updateStats(surfaceData) {
+                // Calculate spread (max - min volatility)
+                if (surfaceData.implied_vols && surfaceData.implied_vols.length > 0) {
+                    const maxVol = Math.max(...surfaceData.implied_vols);
+                    const minVol = Math.min(...surfaceData.implied_vols);
+                    const spread = ((maxVol - minVol) * 100).toFixed(2);
+                    
+                    document.getElementById('spread-value').textContent = `${spread}%`;
+                }
+                
+                // Calculate volume (number of data points)
+                const volume = surfaceData.implied_vols ? surfaceData.implied_vols.length : 0;
+                document.getElementById('volume-value').textContent = volume.toString();
+                
+                // Update last update time
+                const now = new Date();
+                document.getElementById('last-update').textContent = now.toLocaleTimeString();
+            }
+            
+            startTimeUpdate() {
+                setInterval(() => {
+                    const now = new Date();
+                    document.getElementById('current-time').textContent = now.toLocaleTimeString();
+                }, 1000);
+            }
+            
+            animate() {
+                if (!this.isAnimating) {
+                    this.animationId = requestAnimationFrame(() => this.animate());
+                    return;
+                }
+                
+                // Rotate surface mesh slowly
+                if (this.surfaceMesh) {
+                    this.surfaceMesh.rotation.y += 0.005;
+                }
+                
+                // Animate trendline if it exists
+                if (this.trendline) {
+                    this.trendline.rotation.y += 0.002;
+                }
+                
+                // Render
+                this.renderer.render(this.scene, this.camera);
+                
+                this.animationId = requestAnimationFrame(() => this.animate());
+            }
+            
+            toggleAnimation() {
+                this.isAnimating = !this.isAnimating;
+                const button = document.getElementById('toggle-animation');
+                button.textContent = this.isAnimating ? 'Pause' : 'Play';
+                
+                if (this.isAnimating && !this.animationId) {
+                    this.animate();
+                }
+            }
+            
+            resetCamera() {
+                this.camera.position.set(5, 5, 5);
+                this.camera.lookAt(0, 0, 0);
+            }
+            
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+            
+            hideLoading() {
+                const loading = document.getElementById('loading');
+                loading.classList.add('hidden');
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                }, 500);
+            }
+            
+            showError(message) {
+                const loading = document.getElementById('loading');
+                const loadingContent = loading.querySelector('.loading-content');
+                loadingContent.innerHTML = `
+                    <div style="color: #ff4444; font-size: 18px; margin-bottom: 10px;">⚠️</div>
+                    <p style="color: #ff4444;">${message}</p>
+                    <button onclick="location.reload()" style="margin-top: 15px; padding: 8px 16px; background: #ff4444; border: none; color: white; border-radius: 4px; cursor: pointer;">Retry</button>
+                `;
+            }
+        }
+        
+        // Initialize the test wallpaper when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new VolaSurferWallpaperTest();
+        });
+    </script>
+</body>
+</html> 

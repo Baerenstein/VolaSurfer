@@ -22,8 +22,9 @@ pip install tensorflow scikit-learn
 ### 1. Train using Market Data (Recommended)
 
 ```bash
-cd backend/scripts
+cd backend/calibration
 python calibrate_surface.py --mode train --use-market-data --instrument BTC --n-synthetic 500 --epochs 50
+python calibrate_surface.py --mode train --use-market-data --instrument ETH --n-synthetic 500 --epochs 50
 ```
 
 This approach:

@@ -21,7 +21,6 @@ class Settings(BaseSettings):
 
     STORAGE: StorageConfig = StorageConfig()
 
-    #TODO these are not used anywhere yet
     # Default moneyness range for surface filtering
     MIN_MONEYNESS: float = 0.6
     MAX_MONEYNESS: float = 1.4
