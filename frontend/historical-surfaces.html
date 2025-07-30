@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>VolaSurfer - Historical Surfaces</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+        background: #1a1a1a;
+        color: white;
+        min-height: 100vh;
+      }
+      
+      .header {
+        background: rgba(0, 0, 0, 0.8);
+        backdrop-filter: blur(10px);
+        padding: 1rem 2rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        position: sticky;
+        top: 0;
+        z-index: 100;
+      }
+      
+      .logo {
+        font-size: 1.5rem;
+        font-weight: bold;
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .nav-links {
+        display: flex;
+        gap: 1rem;
+      }
+      
+      .nav-link {
+        padding: 0.5rem 1rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        text-decoration: none;
+        color: white;
+        transition: all 0.3s ease;
+      }
+      
+      .nav-link:hover {
+        background: rgba(255, 255, 255, 0.2);
+        border-color: rgba(255, 255, 255, 0.3);
+      }
+      
+      .container {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      
+      .page-title {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        text-align: center;
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+      }
+      
+      .page-subtitle {
+        text-align: center;
+        margin-bottom: 3rem;
+        opacity: 0.8;
+        font-size: 1.1rem;
+      }
+      
+      .launch-app-section {
+        text-align: center;
+        padding: 3rem;
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 16px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 2rem;
+      }
+      
+      .launch-button {
+        display: inline-block;
+        padding: 1.2rem 3rem;
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        border: none;
+        border-radius: 12px;
+        text-decoration: none;
+        color: white;
+        font-weight: 600;
+        font-size: 1.2rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+      }
+      
+      .launch-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.6);
+      }
+      
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 2rem;
+        margin-top: 3rem;
+      }
+      
+      .info-card {
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        padding: 2rem;
+        transition: all 0.3s ease;
+      }
+      
+      .info-card:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: rgba(255, 255, 255, 0.2);
+      }
+      
+      .info-card h3 {
+        font-size: 1.3rem;
+        margin-bottom: 1rem;
+        color: #667eea;
+      }
+      
+      .info-card p {
+        opacity: 0.8;
+        line-height: 1.6;
+      }
+      
+      .features-list {
+        list-style: none;
+        margin-top: 1rem;
+      }
+      
+      .features-list li {
+        padding: 0.5rem 0;
+        opacity: 0.8;
+      }
+      
+      .features-list li:before {
+        content: "✓";
+        color: #667eea;
+        margin-right: 0.5rem;
+        font-weight: bold;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <div class="logo">VolaSurfer</div>
+      <nav class="nav-links">
+        <a href="index.html" class="nav-link">🏠 Home</a>
+        <a href="#" class="nav-link" onclick="launchApp()">🚀 Launch App</a>
+      </nav>
+    </header>
+    
+    <div class="container">
+      <h1 class="page-title">Historical Volatility Surfaces</h1>
+      <p class="page-subtitle">
+        Explore and analyze historical volatility surface data with interactive 3D visualizations
+      </p>
+      
+      <div class="launch-app-section">
+        <h2 style="margin-bottom: 1rem;">Interactive Analysis Tool</h2>
+        <p style="margin-bottom: 2rem; opacity: 0.8;">
+          Access the full-featured application to browse historical volatility surfaces, 
+          compare different time periods, and analyze market dynamics.
+        </p>
+        <button class="launch-button" onclick="launchApp()">
+          Launch Historical Surfaces App
+        </button>
+      </div>
+      
+      <div class="info-grid">
+        <div class="info-card">
+          <h3>📊 Interactive Visualizations</h3>
+          <p>Explore 3D volatility surfaces with interactive controls for rotation, zoom, and perspective.</p>
+          <ul class="features-list">
+            <li>3D surface plotting</li>
+            <li>Wireframe and solid views</li>
+            <li>Time-series playback</li>
+            <li>Custom interpolation</li>
+          </ul>
+        </div>
+        
+        <div class="info-card">
+          <h3>📈 Historical Data</h3>
+          <p>Access comprehensive historical volatility surface data across multiple assets and time periods.</p>
+          <ul class="features-list">
+            <li>Multiple asset support</li>
+            <li>Configurable time ranges</li>
+            <li>High-resolution data</li>
+            <li>Real-time updates</li>
+          </ul>
+        </div>
+        
+        <div class="info-card">
+          <h3>🔧 Analysis Tools</h3>
+          <p>Advanced tools for volatility surface analysis and market insight generation.</p>
+          <ul class="features-list">
+            <li>Surface comparison</li>
+            <li>Statistical analysis</li>
+            <li>Export capabilities</li>
+            <li>Custom filtering</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+      function launchApp() {
+        // Redirect to the React app
+        window.location.href = 'app.html';
+      }
+    </script>
+  </body>
+</html>
