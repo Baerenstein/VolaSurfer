@@ -861,10 +861,6 @@ class HistoricalSurfaceViewer {
         
         console.log('Price range:', { minPrice, maxPrice, priceRange, dataPoints: this.priceData.length });
         
-        // Draw background
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
         // Draw grid
         ctx.strokeStyle = '#333';
         ctx.lineWidth = 1;
@@ -923,12 +919,12 @@ class HistoricalSurfaceViewer {
         ctx.font = '12px Arial';
         ctx.textAlign = 'left';
         
-        // Y-axis labels (price)
-        for (let i = 0; i <= 4; i++) {
-            const price = minPrice - pricePadding + (i / 4) * priceRange;
-            const y = padding + (4 - i) / 4 * chartHeight;
-            ctx.fillText(`$${price.toFixed(2)}`, 5, y + 4);
-        }
+        // Y-axis labels (price) - only min and max
+        const minPriceLabel = `$${minPrice.toFixed(2)}`;
+        const maxPriceLabel = `$${maxPrice.toFixed(2)}`;
+        
+        ctx.fillText(minPriceLabel, 5, canvas.height - padding + 4);
+        ctx.fillText(maxPriceLabel, 5, padding + 4);
         
         // X-axis label (time)
         ctx.textAlign = 'center';
@@ -968,10 +964,6 @@ class HistoricalSurfaceViewer {
         const volRange = (maxVol - minVol) + 2 * volPadding;
         
         console.log('Volatility range:', { minVol, maxVol, volRange, dataPoints: this.volatilityData.length });
-        
-        // Draw background
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         // Draw grid
         ctx.strokeStyle = '#333';
@@ -1031,12 +1023,12 @@ class HistoricalSurfaceViewer {
         ctx.font = '12px Arial';
         ctx.textAlign = 'left';
         
-        // Y-axis labels (volatility)
-        for (let i = 0; i <= 4; i++) {
-            const vol = minVol - volPadding + (i / 4) * volRange;
-            const y = padding + (4 - i) / 4 * chartHeight;
-            ctx.fillText(`${vol.toFixed(1)}%`, 5, y + 4);
-        }
+        // Y-axis labels (volatility) - only min and max
+        const minVolLabel = `${minVol.toFixed(1)}%`;
+        const maxVolLabel = `${maxVol.toFixed(1)}%`;
+        
+        ctx.fillText(minVolLabel, 5, canvas.height - padding + 4);
+        ctx.fillText(maxVolLabel, 5, padding + 4);
         
         // X-axis label (time)
         ctx.textAlign = 'center';
@@ -1076,10 +1068,6 @@ class HistoricalSurfaceViewer {
         const volOfVolRange = (maxVolOfVol - minVolOfVol) + 2 * volOfVolPadding;
         
         console.log('Vol-of-vol range:', { minVolOfVol, maxVolOfVol, volOfVolRange, dataPoints: this.volOfVolData.length });
-        
-        // Draw background
-        ctx.fillStyle = '#1a1a1a';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
         
         // Draw grid
         ctx.strokeStyle = '#333';
@@ -1139,12 +1127,12 @@ class HistoricalSurfaceViewer {
         ctx.font = '12px Arial';
         ctx.textAlign = 'left';
         
-        // Y-axis labels (vol-of-vol)
-        for (let i = 0; i <= 4; i++) {
-            const volOfVol = minVolOfVol - volOfVolPadding + (i / 4) * volOfVolRange;
-            const y = padding + (4 - i) / 4 * chartHeight;
-            ctx.fillText(`${volOfVol.toFixed(3)}`, 5, y + 4);
-        }
+        // Y-axis labels (vol-of-vol) - only min and max
+        const minVolOfVolLabel = `${minVolOfVol.toFixed(3)}`;
+        const maxVolOfVolLabel = `${maxVolOfVol.toFixed(3)}`;
+        
+        ctx.fillText(minVolOfVolLabel, 5, canvas.height - padding + 4);
+        ctx.fillText(maxVolOfVolLabel, 5, padding + 4);
         
         // X-axis label (time)
         ctx.textAlign = 'center';

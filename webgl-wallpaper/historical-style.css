@@ -337,7 +337,7 @@ body {
     bottom: 20px;
     left: 20px;
     width: 500px;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.3);
     border: 1px solid #333;
     border-radius: 12px;
     backdrop-filter: blur(10px);
@@ -382,11 +382,25 @@ body {
     font-size: 12px;
 }
 
-#price-canvas {
+#price-canvas,
+#volatility-canvas,
+#vol-of-vol-canvas {
     display: block;
     width: 100%;
-    height: 200px;
-    background: #1a1a1a;
+    height: 120px;
+    background: transparent;
+    border-radius: 0;
+}
+
+#price-canvas {
+    border-radius: 0;
+}
+
+#volatility-canvas {
+    border-radius: 0;
+}
+
+#vol-of-vol-canvas {
     border-radius: 0 0 12px 12px;
 }
 
