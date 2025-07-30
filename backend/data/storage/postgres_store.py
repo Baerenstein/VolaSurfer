@@ -219,6 +219,42 @@ class PostgresStore(BaseStore):
         df = pd.read_sql_query(query, self.conn, params=(symbol,))
         return df
 
+    def get_price_history(self, limit: int = 100, asset_id: Optional[int] = None) -> List[dict]:
+        """Retrieve historical price data"""
+        try:
+            with self.conn.cursor() as cursor:
+                if asset_id:
+                    query = """
+                        SELECT price, timestamp, asset_id, symbol 
+                        FROM underlying_data 
+                        WHERE asset_id = %s 
+                        ORDER BY timestamp DESC 
+                        LIMIT %s
+                    """
+                    cursor.execute(query, (asset_id, limit))
+                else:
+                    query = """
+                        SELECT price, timestamp, asset_id, symbol 
+                        FROM underlying_data 
+                        ORDER BY timestamp DESC 
+                        LIMIT %s
+                    """
+                    cursor.execute(query, (limit,))
+                
+                rows = cursor.fetchall()
+                return [
+                    {
+                        "price": float(row[0]),
+                        "timestamp": row[1],
+                        "asset_id": row[2],
+                        "symbol": row[3]
+                    }
+                    for row in rows
+                ]
+        except Exception as e:
+            self.logger.error(f"Error getting price history: {str(e)}")
+            return []
+
     def store_options_chain(self, options_df: pd.DataFrame):
         """Store options chain data with limited decimal places"""
         for idx, row in options_df.iterrows():

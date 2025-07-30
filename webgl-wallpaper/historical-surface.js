@@ -11,6 +11,9 @@ class HistoricalSurfaceViewer {
         this.historicalData = [];
         this.currentSurfaceIndex = 0;
         this.assets = [];
+        this.priceData = [];
+        this.volatilityData = [];
+        this.volOfVolData = [];
         
         // Playback controls
         this.isPlaying = false;
@@ -21,13 +24,14 @@ class HistoricalSurfaceViewer {
         this.interpolationDensity = 20;
         this.showWireframe = false;
         this.selectedAsset = null;
-        this.dataLimit = 500;
+        this.dataLimit = 2000;
         
         // API endpoints
         this.apiBase = 'http://localhost:8000';
         this.endpoints = {
             history: '/api/v1/vol_surface/history',
-            assets: '/api/v1/assets'
+            assets: '/api/v1/assets',
+            priceHistory: '/api/price_history'
         };
         
         this.init();
@@ -151,6 +155,13 @@ class HistoricalSurfaceViewer {
             this.dataLimit = Number(e.target.value);
             this.stopPlayback();
             this.loadHistoricalData();
+            // Recalculate volatility with new window size
+            if (this.priceData.length > 0) {
+                this.calculateVolatility();
+                this.updatePriceChart();
+                this.updateVolatilityChart();
+                this.updateVolOfVolChart();
+            }
         });
         
         document.getElementById('interpolation-select').addEventListener('change', (e) => {
@@ -208,6 +219,20 @@ class HistoricalSurfaceViewer {
             this.currentSurfaceIndex = Number(e.target.value);
             this.updateSurfaceVisualization();
             this.updateUI();
+        });
+        
+        // Price chart toggle
+        document.getElementById('toggle-chart').addEventListener('click', () => {
+            const chart = document.getElementById('price-chart');
+            const button = document.getElementById('toggle-chart');
+            if (chart.classList.contains('minimized')) {
+                chart.classList.remove('minimized');
+                button.textContent = 'Minimize';
+                this.updatePriceChart();
+            } else {
+                chart.classList.add('minimized');
+                button.textContent = 'Expand';
+            }
         });
     }
     
@@ -271,6 +296,9 @@ class HistoricalSurfaceViewer {
                 this.updateSurfaceVisualization();
                 this.showPlaybackControls();
                 this.updateConnectionStatus('Connected');
+                
+                // Load price data
+                this.loadPriceData();
             } else {
                 const errorText = await response.text();
                 console.error('Historical data API error:', response.status, errorText);
@@ -282,6 +310,74 @@ class HistoricalSurfaceViewer {
             this.updateConnectionStatus('Error');
         } finally {
             this.showLoading(false);
+        }
+    }
+    
+    async loadPriceData() {
+        try {
+            const params = new URLSearchParams({
+                limit: this.dataLimit ? this.dataLimit.toString() : '2000'
+            });
+            
+            if (this.selectedAsset) {
+                params.append('asset_id', this.selectedAsset.toString());
+            }
+            
+            const url = `${this.apiBase}${this.endpoints.priceHistory}?${params}`;
+            console.log('Loading price data from:', url);
+            
+            const response = await fetch(url);
+            
+            if (response.ok) {
+                const data = await response.json();
+                this.priceData = data.prices || [];
+                
+                // Filter out invalid data points and ensure proper conversion
+                this.priceData = this.priceData.filter(point => {
+                    if (!point) return false;
+                    
+                    // Handle different data types
+                    let price = point.price;
+                    if (typeof price === 'string') {
+                        price = parseFloat(price);
+                    }
+                    
+                    return typeof price === 'number' && 
+                           !isNaN(price) && 
+                           price > 0 && 
+                           price < 1000000; // Reasonable upper limit
+                }).map(point => ({
+                    ...point,
+                    price: typeof point.price === 'string' ? parseFloat(point.price) : point.price
+                }));
+                
+                console.log('Loaded price data:', this.priceData.length, 'points');
+                console.log('Sample price data:', this.priceData.slice(0, 3));
+                console.log('Raw price data sample:', data.prices?.slice(0, 3));
+                
+                if (this.priceData.length > 0) {
+                    const prices = this.priceData.map(p => p.price);
+                    console.log('Price range:', {
+                        min: Math.min(...prices),
+                        max: Math.max(...prices),
+                        avg: prices.reduce((a, b) => a + b, 0) / prices.length
+                    });
+                }
+                
+                if (this.priceData.length > 0) {
+                    this.calculateVolatility();
+                    this.updatePriceChart();
+                    this.updateVolatilityChart();
+                    this.updateVolOfVolChart();
+                } else {
+                    console.warn('No valid price data found');
+                }
+            } else {
+                const errorText = await response.text();
+                console.error('Price data API error:', response.status, errorText);
+            }
+        } catch (error) {
+            console.error('Error loading price data:', error);
         }
     }
     
@@ -644,6 +740,422 @@ class HistoricalSurfaceViewer {
             statusElement.textContent = status;
             statusElement.className = `connection-status ${status.toLowerCase()}`;
         }
+    }
+    
+    getWindowSize() {
+        const dataLimitSelect = document.getElementById('limit-select');
+        if (!dataLimitSelect) return 21; // Default fallback
+        
+        const dataLimit = parseInt(dataLimitSelect.value);
+        
+        // Scale window size based on data limit
+        if (dataLimit <= 100) return 10;
+        if (dataLimit <= 500) return 21;
+        if (dataLimit <= 1000) return 30;
+        if (dataLimit <= 2000) return 50;
+        return 100; // For larger datasets
+    }
+    
+    calculateVolatility() {
+        const windowSize = this.getWindowSize();
+        
+        if (!this.priceData || this.priceData.length < windowSize) {
+            this.volatilityData = [];
+            this.volOfVolData = [];
+            return;
+        }
+        
+        // Calculate rolling volatility
+        this.volatilityData = [];
+        
+        for (let i = windowSize - 1; i < this.priceData.length; i++) {
+            const window = this.priceData.slice(i - windowSize + 1, i + 1);
+            const prices = window.map(p => p.price);
+            
+            // Calculate log returns
+            const logReturns = [];
+            for (let j = 1; j < prices.length; j++) {
+                logReturns.push(Math.log(prices[j] / prices[j - 1]));
+            }
+            
+            // Calculate volatility (standard deviation of log returns)
+            const mean = logReturns.reduce((a, b) => a + b, 0) / logReturns.length;
+            const variance = logReturns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / logReturns.length;
+            const volatility = Math.sqrt(variance) * Math.sqrt(252) * 100; // Annualized percentage
+            
+            this.volatilityData.push({
+                timestamp: this.priceData[i].timestamp,
+                volatility: volatility
+            });
+        }
+        
+        console.log('Calculated volatility data:', this.volatilityData.length, 'points');
+        console.log('Volatility range:', {
+            min: Math.min(...this.volatilityData.map(v => v.volatility)),
+            max: Math.max(...this.volatilityData.map(v => v.volatility)),
+            avg: this.volatilityData.reduce((a, b) => a + b.volatility, 0) / this.volatilityData.length
+        });
+        
+        // Calculate volatility of volatility
+        this.calculateVolatilityOfVolatility();
+    }
+    
+    calculateVolatilityOfVolatility() {
+        const volWindowSize = Math.max(10, Math.floor(this.getWindowSize() / 2)); // Smaller window for vol-of-vol
+        
+        if (!this.volatilityData || this.volatilityData.length < volWindowSize) {
+            this.volOfVolData = [];
+            return;
+        }
+        
+        this.volOfVolData = [];
+        
+        for (let i = volWindowSize - 1; i < this.volatilityData.length; i++) {
+            const window = this.volatilityData.slice(i - volWindowSize + 1, i + 1);
+            const volatilities = window.map(v => v.volatility);
+            
+            // Calculate volatility of volatility (standard deviation of volatilities)
+            const mean = volatilities.reduce((a, b) => a + b, 0) / volatilities.length;
+            const variance = volatilities.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / volatilities.length;
+            const volOfVol = Math.sqrt(variance);
+            
+            this.volOfVolData.push({
+                timestamp: this.volatilityData[i].timestamp,
+                volOfVol: volOfVol
+            });
+        }
+        
+        console.log('Calculated vol-of-vol data:', this.volOfVolData.length, 'points');
+        console.log('Vol-of-vol range:', {
+            min: Math.min(...this.volOfVolData.map(v => v.volOfVol)),
+            max: Math.max(...this.volOfVolData.map(v => v.volOfVol)),
+            avg: this.volOfVolData.reduce((a, b) => a + b.volOfVol, 0) / this.volOfVolData.length
+        });
+    }
+    
+    updatePriceChart() {
+        if (!this.priceData || this.priceData.length === 0) {
+            console.log('No price data available for chart');
+            return;
+        }
+        
+        console.log('Updating price chart with data:', this.priceData);
+        
+        const canvas = document.getElementById('price-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Set up chart dimensions
+        const padding = 40;
+        const chartWidth = canvas.width - 2 * padding;
+        const chartHeight = canvas.height - 2 * padding;
+        
+        // Get price range with some padding
+        const prices = this.priceData.map(p => p.price);
+        const minPrice = Math.min(...prices);
+        const maxPrice = Math.max(...prices);
+        const pricePadding = (maxPrice - minPrice) * 0.1;
+        const priceRange = (maxPrice - minPrice) + 2 * pricePadding;
+        
+        console.log('Price range:', { minPrice, maxPrice, priceRange, dataPoints: this.priceData.length });
+        
+        // Draw background
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        
+        // Vertical grid lines (time)
+        for (let i = 0; i <= 5; i++) {
+            const x = padding + (i / 5) * chartWidth;
+            ctx.beginPath();
+            ctx.moveTo(x, padding);
+            ctx.lineTo(x, canvas.height - padding);
+            ctx.stroke();
+        }
+        
+        // Horizontal grid lines (price)
+        for (let i = 0; i <= 4; i++) {
+            const y = padding + (i / 4) * chartHeight;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(canvas.width - padding, y);
+            ctx.stroke();
+        }
+        
+        // Draw price line
+        ctx.strokeStyle = '#00aaff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        this.priceData.forEach((point, index) => {
+            const x = padding + (index / (this.priceData.length - 1)) * chartWidth;
+            const normalizedPrice = (point.price - minPrice + pricePadding) / priceRange;
+            const y = padding + chartHeight - normalizedPrice * chartHeight;
+            
+            if (index === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        
+        ctx.stroke();
+        
+        // Draw price points
+        ctx.fillStyle = '#00aaff';
+        this.priceData.forEach((point, index) => {
+            const x = padding + (index / (this.priceData.length - 1)) * chartWidth;
+            const normalizedPrice = (point.price - minPrice + pricePadding) / priceRange;
+            const y = padding + chartHeight - normalizedPrice * chartHeight;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+        
+        // Draw labels
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        
+        // Y-axis labels (price)
+        for (let i = 0; i <= 4; i++) {
+            const price = minPrice - pricePadding + (i / 4) * priceRange;
+            const y = padding + (4 - i) / 4 * chartHeight;
+            ctx.fillText(`$${price.toFixed(2)}`, 5, y + 4);
+        }
+        
+        // X-axis label (time)
+        ctx.textAlign = 'center';
+        ctx.fillText('Time', canvas.width / 2, canvas.height - 8);
+        
+        // Title
+        ctx.fillStyle = '#00aaff';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`Price History (${this.priceData.length} points)`, canvas.width / 2, 15);
+    }
+    
+    updateVolatilityChart() {
+        if (!this.volatilityData || this.volatilityData.length === 0) {
+            console.log('No volatility data available for chart');
+            return;
+        }
+        
+        console.log('Updating volatility chart with data:', this.volatilityData);
+        
+        const canvas = document.getElementById('volatility-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Set up chart dimensions
+        const padding = 40;
+        const chartWidth = canvas.width - 2 * padding;
+        const chartHeight = canvas.height - 2 * padding;
+        
+        // Get volatility range with some padding
+        const volatilities = this.volatilityData.map(v => v.volatility);
+        const minVol = Math.min(...volatilities);
+        const maxVol = Math.max(...volatilities);
+        const volPadding = (maxVol - minVol) * 0.1;
+        const volRange = (maxVol - minVol) + 2 * volPadding;
+        
+        console.log('Volatility range:', { minVol, maxVol, volRange, dataPoints: this.volatilityData.length });
+        
+        // Draw background
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        
+        // Vertical grid lines (time)
+        for (let i = 0; i <= 5; i++) {
+            const x = padding + (i / 5) * chartWidth;
+            ctx.beginPath();
+            ctx.moveTo(x, padding);
+            ctx.lineTo(x, canvas.height - padding);
+            ctx.stroke();
+        }
+        
+        // Horizontal grid lines (volatility)
+        for (let i = 0; i <= 4; i++) {
+            const y = padding + (i / 4) * chartHeight;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(canvas.width - padding, y);
+            ctx.stroke();
+        }
+        
+        // Draw volatility line
+        ctx.strokeStyle = '#ff8800';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        this.volatilityData.forEach((point, index) => {
+            const x = padding + (index / (this.volatilityData.length - 1)) * chartWidth;
+            const normalizedVol = (point.volatility - minVol + volPadding) / volRange;
+            const y = padding + chartHeight - normalizedVol * chartHeight;
+            
+            if (index === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        
+        ctx.stroke();
+        
+        // Draw volatility points
+        ctx.fillStyle = '#ff8800';
+        this.volatilityData.forEach((point, index) => {
+            const x = padding + (index / (this.volatilityData.length - 1)) * chartWidth;
+            const normalizedVol = (point.volatility - minVol + volPadding) / volRange;
+            const y = padding + chartHeight - normalizedVol * chartHeight;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+        
+        // Draw labels
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        
+        // Y-axis labels (volatility)
+        for (let i = 0; i <= 4; i++) {
+            const vol = minVol - volPadding + (i / 4) * volRange;
+            const y = padding + (4 - i) / 4 * chartHeight;
+            ctx.fillText(`${vol.toFixed(1)}%`, 5, y + 4);
+        }
+        
+        // X-axis label (time)
+        ctx.textAlign = 'center';
+        ctx.fillText('Time', canvas.width / 2, canvas.height - 8);
+        
+        // Title
+        ctx.fillStyle = '#ff8800';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${this.getWindowSize()}-Point Rolling Volatility (${this.volatilityData.length} points)`, canvas.width / 2, 15);
+    }
+    
+    updateVolOfVolChart() {
+        if (!this.volOfVolData || this.volOfVolData.length === 0) {
+            console.log('No vol-of-vol data available for chart');
+            return;
+        }
+        
+        console.log('Updating vol-of-vol chart with data:', this.volOfVolData);
+        
+        const canvas = document.getElementById('vol-of-vol-canvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Clear canvas
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Set up chart dimensions
+        const padding = 40;
+        const chartWidth = canvas.width - 2 * padding;
+        const chartHeight = canvas.height - 2 * padding;
+        
+        // Get vol-of-vol range with some padding
+        const volOfVols = this.volOfVolData.map(v => v.volOfVol);
+        const minVolOfVol = Math.min(...volOfVols);
+        const maxVolOfVol = Math.max(...volOfVols);
+        const volOfVolPadding = (maxVolOfVol - minVolOfVol) * 0.1;
+        const volOfVolRange = (maxVolOfVol - minVolOfVol) + 2 * volOfVolPadding;
+        
+        console.log('Vol-of-vol range:', { minVolOfVol, maxVolOfVol, volOfVolRange, dataPoints: this.volOfVolData.length });
+        
+        // Draw background
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw grid
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 1;
+        
+        // Vertical grid lines (time)
+        for (let i = 0; i <= 5; i++) {
+            const x = padding + (i / 5) * chartWidth;
+            ctx.beginPath();
+            ctx.moveTo(x, padding);
+            ctx.lineTo(x, canvas.height - padding);
+            ctx.stroke();
+        }
+        
+        // Horizontal grid lines (vol-of-vol)
+        for (let i = 0; i <= 4; i++) {
+            const y = padding + (i / 4) * chartHeight;
+            ctx.beginPath();
+            ctx.moveTo(padding, y);
+            ctx.lineTo(canvas.width - padding, y);
+            ctx.stroke();
+        }
+        
+        // Draw vol-of-vol line
+        ctx.strokeStyle = '#ff0080';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        
+        this.volOfVolData.forEach((point, index) => {
+            const x = padding + (index / (this.volOfVolData.length - 1)) * chartWidth;
+            const normalizedVolOfVol = (point.volOfVol - minVolOfVol + volOfVolPadding) / volOfVolRange;
+            const y = padding + chartHeight - normalizedVolOfVol * chartHeight;
+            
+            if (index === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        });
+        
+        ctx.stroke();
+        
+        // Draw vol-of-vol points
+        ctx.fillStyle = '#ff0080';
+        this.volOfVolData.forEach((point, index) => {
+            const x = padding + (index / (this.volOfVolData.length - 1)) * chartWidth;
+            const normalizedVolOfVol = (point.volOfVol - minVolOfVol + volOfVolPadding) / volOfVolRange;
+            const y = padding + chartHeight - normalizedVolOfVol * chartHeight;
+            
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+        
+        // Draw labels
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        
+        // Y-axis labels (vol-of-vol)
+        for (let i = 0; i <= 4; i++) {
+            const volOfVol = minVolOfVol - volOfVolPadding + (i / 4) * volOfVolRange;
+            const y = padding + (4 - i) / 4 * chartHeight;
+            ctx.fillText(`${volOfVol.toFixed(3)}`, 5, y + 4);
+        }
+        
+        // X-axis label (time)
+        ctx.textAlign = 'center';
+        ctx.fillText('Time', canvas.width / 2, canvas.height - 8);
+        
+        // Title
+        ctx.fillStyle = '#ff0080';
+        ctx.font = '14px Arial';
+        ctx.textAlign = 'center';
+        const volWindowSize = Math.max(10, Math.floor(this.getWindowSize() / 2));
+        ctx.fillText(`Volatility of Volatility (${this.volOfVolData.length} points)`, canvas.width / 2, 15);
     }
     
     // Viridis color map function (similar to Plotly's Viridis)

@@ -126,6 +126,19 @@
             </div>
         </div>
         
+        <!-- Price Chart -->
+        <div id="price-chart" class="price-chart">
+            <div class="chart-header">
+                <h3>Price & Volatility History</h3>
+                <div class="chart-controls">
+                    <button id="toggle-chart" class="btn btn-secondary">Minimize</button>
+                </div>
+            </div>
+            <canvas id="price-canvas" width="500" height="120"></canvas>
+            <canvas id="volatility-canvas" width="500" height="120"></canvas>
+            <canvas id="vol-of-vol-canvas" width="500" height="120"></canvas>
+        </div>
+        
         <!-- Loading Overlay -->
         <div id="loading" class="loading-overlay">
             <div class="loading-content">

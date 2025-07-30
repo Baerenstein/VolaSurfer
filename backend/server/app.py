@@ -317,6 +317,42 @@ async def get_trendline(limit: int = Query(100, description="Number of historica
         raise HTTPException(status_code=500, detail=f"Error getting trendline: {str(e)}")
 
 
+@app.get("/api/price_history")
+async def get_price_history(
+    limit: int = Query(100, description="Number of price points to retrieve"),
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
+):
+    """
+    Returns historical price data for the underlying asset.
+    """
+    try:
+        # Get price history from the database
+        price_data = store.get_price_history(limit, asset_id)
+        
+        if not price_data:
+            raise HTTPException(status_code=404, detail="No price data available")
+        
+        # Convert to list of dictionaries
+        price_history = []
+        for row in price_data:
+            price_value = float(row["price"])
+            logging.info(f"Price data point: {row['timestamp']} - {price_value} (raw: {row['price']})")
+            price_history.append({
+                "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], 'isoformat') else str(row["timestamp"]),
+                "price": price_value,
+                "asset_id": row.get("asset_id"),
+                "symbol": row.get("symbol")
+            })
+        
+        return {
+            "prices": price_history,
+            "count": len(price_history)
+        }
+    except Exception as e:
+        logging.error(f"Error getting price history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting price history: {str(e)}")
+
+
 @app.get("/api/stats")
 async def get_stats():
     """
