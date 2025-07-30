@@ -234,6 +234,45 @@ async def health_check():
     }
 
 
+@app.get("/api/v1/calibration-data")
+async def get_calibration_data(
+    surface_id: Optional[int] = Query(None, description="Surface ID to calibrate"),
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
+):
+    """
+    Returns calibration data for a given surface or asset.
+    For now, returns mock calibration data.
+    """
+    try:
+        # Mock calibration data - in production this would call the calibration engine
+        import random
+        
+        # Generate realistic mock data
+        accuracy = round(random.uniform(0.85, 0.99), 3)
+        performance = round(random.uniform(0.80, 0.95), 3)
+        calibration_time = random.randint(150, 500)
+        rmse = round(random.uniform(0.015, 0.045), 4)
+        r2_score = round(random.uniform(0.90, 0.98), 3)
+        
+        calibration_data = {
+            "accuracy": accuracy,
+            "performance": performance,
+            "calibration_time": calibration_time,
+            "rmse": rmse,
+            "r2_score": r2_score,
+            "calibrated_surface": None,  # Would contain actual calibrated surface data
+            "surface_id": surface_id,
+            "asset_id": asset_id,
+            "timestamp": datetime.now().isoformat(),
+            "calibration_method": "mock_cnn"  # or "optimization"
+        }
+        
+        return JSONResponse(content=calibration_data)
+    except Exception as e:
+        logging.error(f"Error getting calibration data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting calibration data: {str(e)}")
+
+
 # WebGL Wallpaper API Endpoints
 @app.get("/api/surface_snapshot")
 async def get_surface_snapshot():

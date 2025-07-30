@@ -8,6 +8,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+    <header class="header">
+        <div class="logo">VolaSurfer</div>
+        <nav class="nav-links">
+            <a href="index.html" class="nav-link">🏠 Home</a>
+            <a href="orderbook-viz.html" class="nav-link">📊 Orderbook</a>
+        </nav>
+    </header>
+    
     <div id="container">
         <canvas id="webgl-canvas"></canvas>
         
@@ -16,6 +24,15 @@
             <div class="panel-header">
                 <h2>Historical Surface Viewer</h2>
                 <div class="connection-status" id="connection-status">Disconnected</div>
+            </div>
+            
+            <!-- View Toggle -->
+            <div class="control-section">
+                <h3>View Mode</h3>
+                <div class="view-toggle">
+                    <button id="standard-view-btn" class="btn btn-primary view-btn active">Standard View</button>
+                    <button id="calibrated-view-btn" class="btn btn-secondary view-btn">Calibrated View</button>
+                </div>
             </div>
             
             <!-- Settings Section -->
@@ -122,6 +139,48 @@
                     <p><strong>Moneyness Range:</strong> <span id="moneyness-range">-</span></p>
                     <p><strong>DTE Range:</strong> <span id="dte-range">-</span></p>
                     <p><strong>Vol Range:</strong> <span id="vol-range">-</span></p>
+                </div>
+            </div>
+            
+            <!-- Calibration Metrics -->
+            <div class="control-section" id="calibration-metrics" style="display: none;">
+                <h3>Calibration Metrics</h3>
+                <div id="calibration-info">
+                    <div class="metric-row">
+                        <span class="metric-label">Accuracy:</span>
+                        <span class="metric-value" id="accuracy">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Performance:</span>
+                        <span class="metric-value" id="performance">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Calibration Time:</span>
+                        <span class="metric-value" id="calib-time">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">RMSE:</span>
+                        <span class="metric-value" id="rmse">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">R² Score:</span>
+                        <span class="metric-value" id="r2-score">-</span>
+                    </div>
+                </div>
+                
+                <!-- Simple Performance Chart -->
+                <div class="performance-chart">
+                    <h4>Performance Overview</h4>
+                    <div class="chart-container">
+                        <div class="chart-bar">
+                            <div class="bar-fill" id="accuracy-bar" style="width: 0%"></div>
+                            <span class="bar-label">Accuracy</span>
+                        </div>
+                        <div class="chart-bar">
+                            <div class="bar-fill" id="performance-bar" style="width: 0%"></div>
+                            <span class="bar-label">Performance</span>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

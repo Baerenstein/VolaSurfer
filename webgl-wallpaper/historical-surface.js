@@ -26,12 +26,17 @@ class HistoricalSurfaceViewer {
         this.selectedAsset = null;
         this.dataLimit = 2000;
         
+        // View mode
+        this.currentViewMode = 'standard'; // 'standard' or 'calibrated'
+        this.calibrationData = null;
+        
         // API endpoints
         this.apiBase = 'http://localhost:8000';
         this.endpoints = {
             history: '/api/v1/vol_surface/history',
             assets: '/api/v1/assets',
-            priceHistory: '/api/price_history'
+            priceHistory: '/api/price_history',
+            calibration: '/api/v1/calibration-data'
         };
         
         this.init();
@@ -176,6 +181,15 @@ class HistoricalSurfaceViewer {
         
         document.getElementById('refresh-btn').addEventListener('click', () => {
             this.loadHistoricalData();
+        });
+        
+        // View toggle event listeners
+        document.getElementById('standard-view-btn').addEventListener('click', () => {
+            this.switchToStandardView();
+        });
+        
+        document.getElementById('calibrated-view-btn').addEventListener('click', () => {
+            this.switchToCalibratedView();
         });
         
         // Playback controls
@@ -387,11 +401,17 @@ class HistoricalSurfaceViewer {
         }
         
         const surface = this.historicalData[this.currentSurfaceIndex];
-        this.createSurfaceMesh(surface);
+        
+        // Render based on current view mode
+        if (this.currentViewMode === 'calibrated') {
+            this.createSurfaceMesh(surface, true); // calibrated mode
+        } else {
+            this.createSurfaceMesh(surface, false); // standard mode
+        }
     }
     
-    createSurfaceMesh(surface) {
-        console.log('Creating surface mesh for surface:', surface);
+    createSurfaceMesh(surface, isCalibrated = false) {
+        console.log('Creating surface mesh for surface:', surface, 'calibrated:', isCalibrated);
         
         // Remove existing surface mesh
         if (this.surfaceMesh) {
@@ -522,10 +542,17 @@ class HistoricalSurfaceViewer {
         const material = new THREE.MeshPhongMaterial({
             vertexColors: true,
             transparent: true,
-            opacity: 0.8,
+            opacity: isCalibrated ? 0.9 : 0.8, // Higher opacity for calibrated view
             side: THREE.DoubleSide,
             wireframe: this.showWireframe
         });
+        
+        // Add calibration overlay if in calibrated mode
+        if (isCalibrated && this.calibrationData) {
+            // Add a subtle glow effect for calibrated surfaces
+            material.emissive = new THREE.Color(0x00ff88);
+            material.emissiveIntensity = 0.1;
+        }
         
         // Create mesh
         this.surfaceMesh = new THREE.Mesh(geometry, material);
@@ -653,6 +680,11 @@ class HistoricalSurfaceViewer {
         if (stepBackwardBtn) {
             stepBackwardBtn.disabled = this.currentSurfaceIndex === this.historicalData.length - 1;
         }
+        
+        // Update calibration metrics if in calibrated view
+        if (this.currentViewMode === 'calibrated') {
+            this.loadCalibrationData();
+        }
     }
     
     populateSurfaceSelect() {
@@ -739,6 +771,181 @@ class HistoricalSurfaceViewer {
         if (statusElement) {
             statusElement.textContent = status;
             statusElement.className = `connection-status ${status.toLowerCase()}`;
+        }
+    }
+    
+    // View switching methods
+    switchToStandardView() {
+        this.currentViewMode = 'standard';
+        this.updateViewToggleUI();
+        this.hideCalibrationMetrics();
+        this.hideComingSoonBanner();
+        this.renderStandardSurface();
+    }
+    
+    switchToCalibratedView() {
+        this.currentViewMode = 'calibrated';
+        this.updateViewToggleUI();
+        this.showCalibrationMetrics();
+        this.showComingSoonBanner();
+        this.clearSurface();
+    }
+    
+    updateViewToggleUI() {
+        const standardBtn = document.getElementById('standard-view-btn');
+        const calibratedBtn = document.getElementById('calibrated-view-btn');
+        
+        if (this.currentViewMode === 'standard') {
+            standardBtn.classList.add('active');
+            calibratedBtn.classList.remove('active');
+        } else {
+            standardBtn.classList.remove('active');
+            calibratedBtn.classList.add('active');
+        }
+    }
+    
+    showCalibrationMetrics() {
+        const metricsElement = document.getElementById('calibration-metrics');
+        if (metricsElement) {
+            metricsElement.style.display = 'block';
+        }
+    }
+    
+    hideCalibrationMetrics() {
+        const metricsElement = document.getElementById('calibration-metrics');
+        if (metricsElement) {
+            metricsElement.style.display = 'none';
+        }
+    }
+    
+    async loadCalibrationData() {
+        try {
+            const currentSurface = this.historicalData[this.currentSurfaceIndex];
+            if (!currentSurface) return;
+            
+            const response = await fetch(`${this.apiBase}${this.endpoints.calibration}?surface_id=${currentSurface.id}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            this.calibrationData = await response.json();
+            this.updateCalibrationMetrics();
+        } catch (error) {
+            console.error('Error loading calibration data:', error);
+            // Use mock data for demonstration
+            this.calibrationData = this.generateMockCalibrationData();
+            this.updateCalibrationMetrics();
+        }
+    }
+    
+    generateMockCalibrationData() {
+        return {
+            accuracy: 0.97,
+            performance: 0.89,
+            calibration_time: 245,
+            rmse: 0.0234,
+            r2_score: 0.945,
+            calibrated_surface: null // Will be generated if needed
+        };
+    }
+    
+    updateCalibrationMetrics() {
+        if (!this.calibrationData) return;
+        
+        const updateMetric = (id, value, format = (v) => v) => {
+            const element = document.getElementById(id);
+            if (element) {
+                element.textContent = format(value);
+            }
+        };
+        
+        updateMetric('accuracy', this.calibrationData.accuracy, (v) => `${(v * 100).toFixed(1)}%`);
+        updateMetric('performance', this.calibrationData.performance, (v) => `${(v * 100).toFixed(1)}%`);
+        updateMetric('calib-time', this.calibrationData.calibration_time, (v) => `${v}ms`);
+        updateMetric('rmse', this.calibrationData.rmse, (v) => v.toFixed(4));
+        updateMetric('r2-score', this.calibrationData.r2_score, (v) => v.toFixed(3));
+        
+        // Update performance bars
+        const accuracyBar = document.getElementById('accuracy-bar');
+        const performanceBar = document.getElementById('performance-bar');
+        
+        if (accuracyBar) {
+            accuracyBar.style.width = `${this.calibrationData.accuracy * 100}%`;
+        }
+        if (performanceBar) {
+            performanceBar.style.width = `${this.calibrationData.performance * 100}%`;
+        }
+    }
+    
+    renderStandardSurface() {
+        // Use the existing surface rendering logic
+        if (this.historicalData.length > 0) {
+            this.updateSurfaceVisualization();
+        }
+    }
+    
+    renderCalibratedSurface() {
+        // Render calibrated surface if available, otherwise use standard
+        if (this.calibrationData && this.calibrationData.calibrated_surface) {
+            this.createCalibratedSurfaceMesh(this.calibrationData.calibrated_surface);
+        } else {
+            // Fall back to standard surface with calibration overlay
+            this.renderStandardSurface();
+            this.addCalibrationOverlay();
+        }
+    }
+    
+    createCalibratedSurfaceMesh(calibratedSurface) {
+        // Similar to createSurfaceMesh but with calibrated data
+        // For now, we'll use the standard mesh with different colors
+        if (this.historicalData.length > 0) {
+            const currentSurface = this.historicalData[this.currentSurfaceIndex];
+            this.createSurfaceMesh(currentSurface, true); // true for calibrated mode
+        }
+    }
+    
+    addCalibrationOverlay() {
+        // Add visual indicators for calibration accuracy
+        // This could be color coding, transparency, or additional geometry
+        console.log('Adding calibration overlay to standard surface');
+    }
+    
+    showComingSoonBanner() {
+        // Create or update the coming soon banner
+        let banner = document.getElementById('coming-soon-banner');
+        if (!banner) {
+            banner = document.createElement('div');
+            banner.id = 'coming-soon-banner';
+            banner.innerHTML = `
+                <div class="coming-soon-content">
+                    <h2>🚀 Calibrated View</h2>
+                    <p>Advanced surface calibration with machine learning models</p>
+                    <div class="coming-soon-features">
+                        <div class="feature">📊 CNN-based Calibration</div>
+                        <div class="feature">🎯 rBergomi Model</div>
+                        <div class="feature">⚡ Real-time Performance</div>
+                        <div class="feature">📈 Accuracy Metrics</div>
+                    </div>
+                    <div class="coming-soon-status">Coming Soon!</div>
+                </div>
+            `;
+            document.body.appendChild(banner);
+        }
+        banner.style.display = 'flex';
+    }
+    
+    hideComingSoonBanner() {
+        const banner = document.getElementById('coming-soon-banner');
+        if (banner) {
+            banner.style.display = 'none';
+        }
+    }
+    
+    clearSurface() {
+        // Remove existing surface mesh
+        if (this.surfaceMesh) {
+            this.scene.remove(this.surfaceMesh);
+            this.surfaceMesh = null;
         }
     }
     
