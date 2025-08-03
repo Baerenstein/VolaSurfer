@@ -42,6 +42,42 @@ settings = Settings()
 store = StorageFactory.create_storage(settings)
 
 
+def filter_surface_data(data: dict, min_moneyness: float, max_moneyness: float, 
+                       min_maturity: int, max_maturity: int) -> dict:
+    """
+    Filter surface data based on moneyness and maturity bounds.
+    
+    Args:
+        data: Dictionary containing surface data with 'moneyness' and 'days_to_expiry' keys
+        min_moneyness: Minimum moneyness threshold
+        max_moneyness: Maximum moneyness threshold  
+        min_maturity: Minimum days to expiry threshold
+        max_maturity: Maximum days to expiry threshold
+    
+    Returns:
+        Filtered dictionary with only data points within the specified bounds
+    """
+    moneyness = data.get("moneyness", [])
+    days_to_expiry = data.get("days_to_expiry", [])
+    
+    if not moneyness or not days_to_expiry:
+        return data
+    
+    # Create mask for filtering
+    mask = [
+        (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
+        for m, dte in zip(moneyness, days_to_expiry)
+    ]
+    
+    # Filter all list values that have the same length as moneyness
+    filtered = {
+        k: [v[i] for i in range(len(moneyness)) if mask[i]] if isinstance(v, list) and len(v) == len(moneyness) else v
+        for k, v in data.items()
+    }
+    
+    return filtered
+
+
 # Error handler for common exceptions
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
@@ -101,16 +137,13 @@ async def get_latest_vol_surface(
         raise HTTPException(status_code=404, detail="Latest volatility surface not found")
     try:
         interpolated_data = interpolate_surface(surface_data, method)
-        moneyness = interpolated_data["moneyness"]
-        days_to_expiry = interpolated_data["days_to_expiry"]
-        mask = [
-            (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
-            for m, dte in zip(moneyness, days_to_expiry)
-        ]
-        filtered = {
-            k: [v[i] for i in range(len(moneyness)) if mask[i]] if isinstance(v, list) and len(v) == len(moneyness) else v
-            for k, v in interpolated_data.items()
-        }
+        filtered = filter_surface_data(
+            interpolated_data, 
+            min_moneyness, 
+            max_moneyness, 
+            min_maturity, 
+            max_maturity
+        )
         return JSONResponse(content=filtered)
     except Exception as e:
         raise HTTPException(
@@ -137,16 +170,13 @@ async def websocket_latest_vol_surface(websocket: WebSocket):
         while True:
             surface_data = store.get_latest_vol_surface()
             interpolated_data = interpolate_surface(surface_data, method)
-            moneyness = interpolated_data["moneyness"]
-            days_to_expiry = interpolated_data["days_to_expiry"]
-            mask = [
-                (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
-                for m, dte in zip(moneyness, days_to_expiry)
-            ]
-            filtered = {
-                k: [v[i] for i in range(len(moneyness)) if mask[i]] if isinstance(v, list) and len(v) == len(moneyness) else v
-                for k, v in interpolated_data.items()
-            }
+            filtered = filter_surface_data(
+                interpolated_data, 
+                min_moneyness, 
+                max_moneyness, 
+                min_maturity, 
+                max_maturity
+            )
             if surface_data is not None:
                 await websocket.send_json(filtered)
             await asyncio.sleep(5)
@@ -206,16 +236,14 @@ async def get_vol_surface_history(
         response_data = []
         for surface in surfaces:
             d = surface.to_dict()
-            moneyness = d.get("moneyness", [])
-            days_to_expiry = d.get("days_to_expiry", [])
-            mask = [
-                (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
-                for m, dte in zip(moneyness, days_to_expiry)
-            ]
-            for k in ["moneyness", "strikes", "maturities", "days_to_expiry", "implied_vols", "option_type"]:
-                if k in d and isinstance(d[k], list) and len(d[k]) == len(moneyness):
-                    d[k] = [d[k][i] for i in range(len(moneyness)) if mask[i]]
-            response_data.append(convert_decimal_to_float(d))
+            filtered_d = filter_surface_data(
+                d, 
+                min_moneyness, 
+                max_moneyness, 
+                min_maturity, 
+                max_maturity
+            )
+            response_data.append(convert_decimal_to_float(filtered_d))
         return JSONResponse(content=response_data)
     except HTTPException as http_exc:
         logging.error(f"HTTP error: {http_exc.detail}")
