@@ -11,7 +11,7 @@ class CurrencyConfig:
     symbol: str
     name: str
     quote_currency: str  # USDT or USDC
-    instrument_format: str  # "UPPERCASE-DASH" or "lowercase_underscore"
+    instrument_format: str  # "UPPERCASE-DASH" or "UPPERCASE_UNDERSCORE" or "lowercase_underscore"
     perpetual_suffix: str  # "-PERPETUAL" or "_perpetual"
     enabled: bool = True
 
@@ -19,8 +19,8 @@ class CurrencyConfig:
 CURRENCY_CONFIGS = {
     "BTC": CurrencyConfig("BTC", "Bitcoin", "USDT", "UPPERCASE-DASH", "-PERPETUAL"),
     "ETH": CurrencyConfig("ETH", "Ethereum", "USDT", "UPPERCASE-DASH", "-PERPETUAL"),
-    "SOL": CurrencyConfig("SOL", "Solana", "USDC", "UPPERCASE-DASH", "-PERPETUAL"),
-    "XRP": CurrencyConfig("XRP", "Ripple", "USDC", "UPPERCASE-DASH", "-PERPETUAL"),
+    "SOL": CurrencyConfig("SOL", "Solana", "USDC", "UPPERCASE_UNDERSCORE", "-PERPETUAL"),
+    "XRP": CurrencyConfig("XRP", "Ripple", "USDC", "UPPERCASE_UNDERSCORE", "-PERPETUAL"),
     "ADA": CurrencyConfig("ADA", "Cardano", "USDC", "lowercase_underscore", "_perpetual"),
 }
 
@@ -39,18 +39,18 @@ def get_deribit_currency_code(symbol: str) -> str:
     if not config:
         raise ValueError(f"Currency '{symbol}' not supported")
     
-    # For SOL, the options use "sol_usdc" as the price_index, not "SOL"
-    if symbol.upper() == "SOL":
-        return "sol_usdc"
+    # Special handling for currencies that use different API formats
+    api_format_overrides = {
+        "SOL": "sol_usdc",
+        "XRP": "xrp_usdc",
+        "BTC": "BTC",
+        "ETH": "ETH"
+    }
     
-    # For XRP, the options use "xrp_usdc" as the price_index, not "XRP"
-    if symbol.upper() == "XRP":
-        return "xrp_usdc"
+    if symbol.upper() in api_format_overrides:
+        return api_format_overrides[symbol.upper()]
     
-    # For BTC and ETH, the options use just the symbol as the currency
-    if symbol.upper() in ["BTC", "ETH"]:
-        return symbol.upper()
-    
+    # Use configured format for other currencies
     if config.instrument_format == "lowercase_underscore":
         return f"{symbol.lower()}_{config.quote_currency.lower()}"
     else:
@@ -62,14 +62,16 @@ def get_perpetual_instrument(symbol: str) -> str:
     if not config:
         raise ValueError(f"Currency '{symbol}' not supported")
     
-    # For SOL, the perpetual is SOL_USDC (not SOL-PERPETUAL)
-    if symbol.upper() == "SOL":
-        return "SOL_USDC"
+    # Special handling for currencies that use different perpetual formats
+    perpetual_format_overrides = {
+        "SOL": "SOL_USDC",
+        "XRP": "XRP_USDC"
+    }
     
-    # For XRP, the perpetual is XRP_USDC (not XRP-PERPETUAL)
-    if symbol.upper() == "XRP":
-        return "XRP_USDC"
+    if symbol.upper() in perpetual_format_overrides:
+        return perpetual_format_overrides[symbol.upper()]
     
+    # Use configured format for other currencies
     if config.instrument_format == "lowercase_underscore":
         return f"{symbol.lower()}{config.perpetual_suffix}"
     else:
