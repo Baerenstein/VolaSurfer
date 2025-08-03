@@ -481,3 +481,48 @@ async def websocket_stream(websocket: WebSocket):
         if client_connected:
             await websocket.close()
 
+
+##TODO
+#@app.websocket("/api/bid_ask")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/spread")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/spread_vol")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/spread_vol_of_vol")
+#async def websocket_stream(websocket: WebSocket):
+    pass
+
+##TODO
+#@app.websocket("/api/orderbook")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/orderbook_imbalance")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/orderbook_flow")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/orderbook_depth")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/trades")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
