@@ -7,10 +7,11 @@ import argparse
 import sys
 
 from infrastructure.settings import Settings
-from data.exchanges.deribit import DeribitAPI
+from data.exchanges.deribit import DeribitAPI, decode_xrp_strike
 from core.VolatilityEngine import VolatilityEngine
 from data.storage import StorageFactory
 from infrastructure.utils.logging import setup_logger
+from infrastructure.utils.ascii_art import display_volasurfer_art
 from data.utils.data_schemas import OptionContract, MarketState 
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -107,7 +108,13 @@ class MarketDataEngine:
             try:
                 expiry_date = datetime.strptime(parts[1], "%d%b%y")
                 days_to_expiry = (expiry_date.date() - current_time.date()).days
-                strike = float(parts[2])
+                
+                # Handle XRP's special strike format
+                if self.currency.upper() == "XRP":
+                    strike = decode_xrp_strike(parts[2])
+                else:
+                    strike = float(parts[2])
+                
                 moneyness = strike / current_price
                 if (
                     self.min_expiry_days <= days_to_expiry <= self.max_expiry_days
@@ -226,49 +233,73 @@ class MarketDataEngine:
             if self.currency in symbol:
                 option_data = self.exchange_api.get_option_data(symbol)
                 if option_data is None:
-                    raise LookupError(f"No option data found for symbol: {symbol}")
+                    self.logger.warning(f"No option data found for symbol: {symbol}")
+                    continue
 
                 parts = symbol.split("-")
                 if len(parts) < 4:
-                    raise ValueError(f"Invalid symbol format: {symbol}")
-                expiry_date = datetime.strptime(parts[1], "%d%b%y")
-                days_to_expiry = (expiry_date.date() - current_time.date()).days
-                strike = float(parts[2])
-                price = self.state.last_price
-                moneyness = strike / price if price else None
+                    self.logger.warning(f"Invalid symbol format: {symbol}")
+                    continue
+                try:
+                    expiry_date = datetime.strptime(parts[1], "%d%b%y")
+                    days_to_expiry = (expiry_date.date() - current_time.date()).days
+                    
+                    # Handle XRP's special strike format
+                    if self.currency.upper() == "XRP":
+                        strike = decode_xrp_strike(parts[2])
+                    else:
+                        strike = float(parts[2])
+                    
+                    price = self.state.last_price
+                    moneyness = strike / price if price else None
 
-                option = OptionContract(
-                    timestamp=current_time,
-                    asset_id=self.asset_id,
-                    base_currency=self.currency,
-                    symbol=symbol,
-                    expiry_date=expiry_date,
-                    days_to_expiry=days_to_expiry,
-                    strike=strike,
-                    moneyness=moneyness,
-                    option_type=parts[3].lower(),
-                    last_price=option_data.get("last_price", 0),
-                    implied_vol=option_data.get("implied_vol", 0),
-                    bid_price=option_data.get("bid_price"),
-                    ask_price=option_data.get("ask_price"),
-                    delta=option_data.get("delta"),
-                    gamma=option_data.get("gamma"),
-                    vega=option_data.get("vega"),
-                    theta=option_data.get("theta"),
-                    open_interest=option_data.get("open_interest"),
-                    snapshot_id=current_time.isoformat(), # change snapshot id method
-                )
+                    option = OptionContract(
+                        timestamp=current_time,
+                        asset_id=self.asset_id,
+                        base_currency=self.currency,
+                        symbol=symbol,
+                        expiry_date=expiry_date,
+                        days_to_expiry=days_to_expiry,
+                        strike=strike,
+                        moneyness=moneyness,
+                        option_type=parts[3].lower(),
+                        last_price=option_data.get("last_price", 0),
+                        implied_vol=option_data.get("implied_vol", 0),
+                        bid_price=option_data.get("bid_price"),
+                        ask_price=option_data.get("ask_price"),
+                        delta=option_data.get("delta"),
+                        gamma=option_data.get("gamma"),
+                        vega=option_data.get("vega"),
+                        theta=option_data.get("theta"),
+                        open_interest=option_data.get("open_interest"),
+                        snapshot_id=current_time.isoformat(), # change snapshot id method
+                    )
 
-                data_points.append(option)
+                    data_points.append(option)
+                except (ValueError, TypeError) as e:
+                    self.logger.warning(f"Error processing option {symbol}: {e}")
+                    continue
+                
+        if not data_points:
+            self.logger.warning(f"No valid options data found for {self.currency}")
+            # Return empty DataFrame with correct columns
+            return pd.DataFrame(columns=[
+                'timestamp', 'asset_id', 'base_currency', 'symbol', 'expiry_date', 
+                'days_to_expiry', 'strike', 'moneyness', 'option_type', 'last_price', 
+                'implied_vol', 'bid_price', 'ask_price', 'delta', 'gamma', 'vega', 
+                'theta', 'open_interest', 'snapshot_id'
+            ])
                 
         options_dicts = [vars(option) for option in data_points]
         options_chain = pd.DataFrame(options_dicts)
-        options_chain["bid_price"].fillna(0, inplace=True)
-        options_chain["ask_price"].fillna(0, inplace=True)
-        options_chain["open_interest"].fillna(0, inplace=True)
-
-        # Log data ranges
+        
+        # Only fill NaN values if the DataFrame is not empty
         if not options_chain.empty:
+            options_chain["bid_price"].fillna(0, inplace=True)
+            options_chain["ask_price"].fillna(0, inplace=True)
+            options_chain["open_interest"].fillna(0, inplace=True)
+
+            # Log data ranges
             strikes_min = options_chain['strike'].min()
             strikes_max = options_chain['strike'].max()
             dte_min = options_chain['days_to_expiry'].min()
@@ -295,6 +326,11 @@ class MarketDataEngine:
                               including term structure and skew information
         """
         self.logger.info(f"Generating volatility surface from {len(option_chain)} option data points")
+        
+        # Handle empty DataFrame
+        if option_chain.empty:
+            self.logger.warning("No options data available for volatility surface calculation")
+            return None
         
         for row in option_chain.itertuples():
             self.vol_engine.add_market_data(
@@ -438,63 +474,6 @@ class MarketDataEngine:
                     break
 
 
-def display_ascii_art():
-    """Display ASCII art for VolaSurfer"""
-    ascii_art = """
-.                                                                                                                                                                                  .
-.                                                                                                 ...                                                                              .
-.                                                                                                  .                                                                               .
-.                                                                                                  .                                                                               .
-.                                                                                                  .                                                                               .
-.                                                                                                  .                                                                               .
-.                                                                                                  .                                            ..                                 .
-.                                                                                                  .                                                                               .
-.          ....  ...... .                      ..                                                  .                                                                               .
-.                ...      .   ..,;,;ccllodddxxxkkdooolc:;,'..                                      .                                                                      .......  .
-.                .       ..,cdxOKKKXXXXXXXXXKKKKKKKKKKKKK00Okdlc;'.                                .                                                         .   .              .  .
-.        ...... .;;,,,;cldOKXXKXXXKKKKKKKKK00KK0000000000OO00000Okxdl:,..                          .                                              .                             .  .
-.                .;xKKKKKKKKKK00000000000000000OOOOOOOO00OOOOkkkxxxxxkkxdoc;'.                     .                                                                            .  .
-.   ..           ...lOK00OOOO0000000000OOOOOOOOkkddxxxxxkxxxxxxdddddddooodxxxdlc;'.                .                              .                                             .  .
-.   ,;.  ...... ...  .lO0OOOOOOkkkkkkOOOOOkkkxxdooooooddodoooolllllllllccccccclodxdl:;'.           .              ..                                                            .  .
-.  .;;.          ..    'okOkxxxkxxxddxdddoooollll::ccccclllllcccccc::;;;;;;;;;;::::clodolcc:,.     ..                                                                           .  .
-.  .,;.          .       'cdxdoooolcllloollllcc:,;:;;;;:;;::::::;;;;,,,,,,,,,,,,,;;;;;;;cloodollc;,,.                                                                           .  .
-.   ,;.  ......  ..        .,clcccccc:c:::::;,,,;'.''''','',,,;;;,,,,,,,,,,,,,,,;;;;;;;;::::::codddxdc:,..                                                                      .  .
-.   ';.          .           .,cc:;,,,,;;;:;;,,'.'''..''.''',,,;;;;;;,,,;;;;;;;;;::::::::::::::lc:cclodxxol:;..                                                                 .  .
-.   .'           .              '::;,,,,',''''..'''''''''''',,,:::;;:;;;;::::::::ccccccccccclccolclcllllloodddoc;.                                                              .  .
-.  .''   ...... ...               '::,'''',,,,,,''',,',,'',,',,,;;;:::::ccccccccccccccccccllllldolooooooooddoddxxxo:.                                                           .  .
-.  .,:.          .                 .':;;,,,,',,,,,,,,;,,;,,,,,,,;;;:::cccclllllloooooooolllllldxkxxxxxxxxxxxxxxxkkkkxl,.                                                        .  .
-.  .,;.    .     .                    .,:;;;;;;;,,,;,,;;,,;;;;;;;;;::;:cccclllloooooodddddddddxxxddooooooooooooodxkO00Oko;.                                                     .  .
-.  .,:.    ....  ..                     'cl:;;;:;;;;;;;;;;;;;;;;::;;;:::::ccllllllloooooodddollolcc::ccccccc::;:::cok00KKKOo:'.                                                 .  .
-.   'c'          .                       .,lolc::::::::::ccc:cc::c:::::::::ccclllllllllllllc;;;::;::cc:;;;,;;,',,,,,;oOKKKXXXKOo;.                                              .  .
-.   ;:.   .  ..  .                         .,cddolclllllloollllllllllllllllllllllllollooc;,,,,;ccccc::::;,;;,,,,,,,',,;d0XXXXXNNX0xc.                         ..;:::::;;;;,'....,. .
-.  ...   ...... ...                           'lxxdddoodddddddddddxxdddddddddoooooooddoc;;;;:cldollcc:::;;::;;;;;;;;,,;;ckKXNNNNNNNNKx:.            ...,;clodkO0K0Okxdolc:;,'...'. .
-.                .                              .ldxddxxkkkkkkkkkkkkkkxxkkxxxxxdxxxxxoc:clloxxxxdllccccc::::::::::::;:::::lk0KXXNNWNNWNXOo,...';cldkOKXX0xdolc:,'...            .  .
-.        .  ..   .                                .,:lodxkOO0000000000OOOOOOOOOkkkkxocoxkOOOkxxxdlllllcccccccccccclcccllooddxkO0KXNNNNWWWWNKKXXNXNX0kxl;.                       .  .
-.        .. ... ...                             .   ..:odddxOO0KKKKKKXKKKKK00K000OxdkO00OOkkxxxxxddddddddddddxxxxkOOO0KKKXXXXXXKKK000Okxxdolc::;,;,...                          .  .
-.                .                                    .,lxxxxkOOO00KKXXXXXXXXXK00O0KXK0Okxxxxxxkkxddddddddoooolcllllllcc::;;;,''......                                          .  .
-.        .. ...  ..                                     .ckOOOOOOOO00KKKKXXXNKdc;,''...........'.......                                                                         .  .
-.        ................                                 ,d00KKKKKKXXXXXX0x:.                 .                                                                         ........  .
-.          ....                ...                         .,o0XXNNNNXOdl;.                    .                                                                         ........  .
-.                        .  ..  .                             .:llll:,.                        ..                                                             ........       ..... .
-.                           ..            . .....                                              .                                                   ........       .....            .
-.                                         ....                ..                               ..                                      ........        .....                       .
-.                                                         ...                                  .                             .......        ...                                    .
-.                                                         ...            . .....               .                  ......         ...                                               .
-.                            ..                                         .....                ....     ........        ...                 .','...........''.....'.....             .
-.                           .;,''''.'',;'','.',,,'.'.                                  . ....              ...                            .......'''......'.'...'''.'.             .
-.                            .               ..                                        . ...                                                                                       .
-.                                                                                                                                                                                  .
-'..................................................................................................................................................................................'
-"""
-    print(ascii_art)
-
-
-
-
-
-
-
-
 def parse_arguments():
     """Parse command line arguments for currency selection."""
     parser = argparse.ArgumentParser(
@@ -542,6 +521,8 @@ Examples:
     # Add support for -BTC, -ETH style arguments
     parser.add_argument('-BTC', action='store_const', const='BTC', dest='crypto_flag')
     parser.add_argument('-ETH', action='store_const', const='ETH', dest='crypto_flag')
+    parser.add_argument('-SOL_USDC', action='store_const', const='SOL', dest='crypto_flag')
+    parser.add_argument('-XRP', action='store_const', const='XRP', dest='crypto_flag')
     
     # ASCII art option
     parser.add_argument('--show-art', action='store_true', help='Display ASCII art on startup')
@@ -581,7 +562,7 @@ async def main():
         currency, interval, show_art = parse_arguments()
         
         if show_art:
-            display_ascii_art()
+            display_volasurfer_art()
         
         settings = Settings()
         exchange_api = DeribitAPI()
@@ -608,8 +589,3 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-
-
-# get_option_data is currently run twice, once in _fetch_instruments and once in _process_currency_updates
-# this leads to a lot of redundant calls to the API and slows down the algorithm
-# instead it should call the api periodically and use a websocket to get the updates.

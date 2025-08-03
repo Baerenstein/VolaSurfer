@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VolaSurfer WebGL Wallpaper</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <!-- WebGL Canvas -->
+    <canvas id="webgl-canvas"></canvas>
+    
+    <!-- Overlay UI -->
+    <div id="overlay">
+        <div class="overlay-content">
+            <div class="time-display" id="time-display">
+                <span id="current-time">--:--:--</span>
+            </div>
+            
+            <div class="stats-container">
+                <div class="stat-item">
+                    <span class="stat-label">Spread</span>
+                    <span class="stat-value" id="spread-value">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Volume</span>
+                    <span class="stat-value" id="volume-value">--</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-label">Last Update</span>
+                    <span class="stat-value" id="last-update">--</span>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <button id="toggle-animation" class="control-btn">Pause</button>
+                <button id="reset-camera" class="control-btn">Reset View</button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="loading" class="loading-overlay">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <p>Loading VolaSurfer Data...</p>
+        </div>
+    </div>
+    
+    <script src="main.js"></script>
+</body>
+</html> 

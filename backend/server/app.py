@@ -42,6 +42,42 @@ settings = Settings()
 store = StorageFactory.create_storage(settings)
 
 
+def filter_surface_data(data: dict, min_moneyness: float, max_moneyness: float, 
+                       min_maturity: int, max_maturity: int) -> dict:
+    """
+    Filter surface data based on moneyness and maturity bounds.
+    
+    Args:
+        data: Dictionary containing surface data with 'moneyness' and 'days_to_expiry' keys
+        min_moneyness: Minimum moneyness threshold
+        max_moneyness: Maximum moneyness threshold  
+        min_maturity: Minimum days to expiry threshold
+        max_maturity: Maximum days to expiry threshold
+    
+    Returns:
+        Filtered dictionary with only data points within the specified bounds
+    """
+    moneyness = data.get("moneyness", [])
+    days_to_expiry = data.get("days_to_expiry", [])
+    
+    if not moneyness or not days_to_expiry:
+        return data
+    
+    # Create mask for filtering
+    mask = [
+        (min_moneyness <= m <= max_moneyness) and (min_maturity <= dte <= max_maturity)
+        for m, dte in zip(moneyness, days_to_expiry)
+    ]
+    
+    # Filter all list values that have the same length as moneyness
+    filtered = {
+        k: [v[i] for i in range(len(moneyness)) if mask[i]] if isinstance(v, list) and len(v) == len(moneyness) else v
+        for k, v in data.items()
+    }
+    
+    return filtered
+
+
 # Error handler for common exceptions
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
@@ -87,57 +123,63 @@ async def get_latest_vol_surface(
     method: SurfaceType = Query(
         SurfaceType.NEAREST,
         description="Interpolation method to use: raw, cubic, or nearest"
-    )
+    ),
+    min_moneyness: float = Query(settings.MIN_MONEYNESS, description="Minimum moneyness to include"),
+    max_moneyness: float = Query(settings.MAX_MONEYNESS, description="Maximum moneyness to include"),
+    min_maturity: int = Query(settings.MIN_MATURITY, description="Minimum days to expiry to include"),
+    max_maturity: int = Query(settings.MAX_MATURITY, description="Maximum days to expiry to include")
 ):
     """
-    Retrieve the latest volatility surface with optional interpolation.
-    
-    Args:
-        method: Interpolation method (raw, cubic, or nearest)
-    
-    Returns:
-        JSON response with surface data
+    Retrieve the latest volatility surface with optional interpolation and moneyness/maturity filtering.
     """
-    # Get raw data from store
     surface_data = store.get_latest_vol_surface()
     if surface_data is None:
         raise HTTPException(status_code=404, detail="Latest volatility surface not found")
-    
-    # Apply interpolation if requested
     try:
         interpolated_data = interpolate_surface(surface_data, method)
-        return JSONResponse(content=interpolated_data)
+        filtered = filter_surface_data(
+            interpolated_data, 
+            min_moneyness, 
+            max_moneyness, 
+            min_maturity, 
+            max_maturity
+        )
+        return JSONResponse(content=filtered)
     except Exception as e:
         raise HTTPException(
             status_code=500,
             detail=f"Error interpolating surface: {str(e)}"
         )
 
-
-
 @app.websocket("/api/v1/ws/latest-vol-surface")
 async def websocket_latest_vol_surface(websocket: WebSocket):
     await websocket.accept()
-
     params = websocket.query_params
-    method = params.get("method")  # Removed default value to make it truly dependent on the query
-
-    if method.upper() not in SurfaceType.__members__:
+    method = params.get("method")
+    min_moneyness = float(params.get("min_moneyness", settings.MIN_MONEYNESS))
+    max_moneyness = float(params.get("max_moneyness", settings.MAX_MONEYNESS))
+    min_maturity = int(params.get("min_maturity", settings.MIN_MATURITY))
+    max_maturity = int(params.get("max_maturity", settings.MAX_MATURITY))
+    if method is None or method.upper() not in SurfaceType.__members__:
         await websocket.send_json({"error": "Invalid interpolation method"})
         await websocket.close()
         return
-
     method = SurfaceType.__members__[method.upper()]
-
     client_connected = True
     try:
         while True:
-            # Here you would typically fetch the latest surface data
             surface_data = store.get_latest_vol_surface()
             interpolated_data = interpolate_surface(surface_data, method)
+            filtered = filter_surface_data(
+                interpolated_data, 
+                min_moneyness, 
+                max_moneyness, 
+                min_maturity, 
+                max_maturity
+            )
             if surface_data is not None:
-                await websocket.send_json(interpolated_data)
-            await asyncio.sleep(5)  # Adjust the frequency of updates as needed
+                await websocket.send_json(filtered)
+            await asyncio.sleep(5)
     except WebSocketDisconnect:
         print("Client disconnected")
         client_connected = False
@@ -164,24 +206,24 @@ async def get_vol_surface_history(
     limit: int = Query(100, description="Number of surfaces to retrieve"),
     min_dte: Optional[int] = Query(None, description="Minimum days to expiry"),
     max_dte: Optional[int] = Query(None, description="Maximum days to expiry"),
-    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by"),
+    min_moneyness: float = Query(settings.MIN_MONEYNESS, description="Minimum moneyness to include"),
+    max_moneyness: float = Query(settings.MAX_MONEYNESS, description="Maximum moneyness to include"),
+    min_maturity: int = Query(settings.MIN_MATURITY, description="Minimum days to expiry to include"),
+    max_maturity: int = Query(settings.MAX_MATURITY, description="Maximum days to expiry to include")
 ) -> List[dict]:
     """
-    Retrieve the last N volatility surfaces ordered by timestamp descending.
+    Retrieve the last N volatility surfaces ordered by timestamp descending, with optional moneyness/maturity filtering.
     """
     try:
         if limit <= 0:
             logging.error("Limit must be a positive integer")
             raise HTTPException(status_code=422, detail="Limit must be a positive integer")
-
         logging.info(f"Fetching last {limit} volatility surfaces with DTE filter: {min_dte}-{max_dte}, asset_id: {asset_id}")
         surfaces = store.get_last_n_surfaces(limit, min_dte=min_dte, max_dte=max_dte, asset_id=asset_id)
-        
         if len(surfaces) == 0:
             logging.warning("No volatility surfaces found")
             return JSONResponse(status_code=404, content={"detail": "No volatility surfaces found"})
-            
-        # Convert all Decimal objects to float for JSON serialization
         def convert_decimal_to_float(data):
             if isinstance(data, list):
                 return [convert_decimal_to_float(item) for item in data]
@@ -191,8 +233,17 @@ async def get_vol_surface_history(
                 return float(data)
             else:
                 return data
-
-        response_data = [convert_decimal_to_float(surface.to_dict()) for surface in surfaces]
+        response_data = []
+        for surface in surfaces:
+            d = surface.to_dict()
+            filtered_d = filter_surface_data(
+                d, 
+                min_moneyness, 
+                max_moneyness, 
+                min_maturity, 
+                max_maturity
+            )
+            response_data.append(convert_decimal_to_float(filtered_d))
         return JSONResponse(content=response_data)
     except HTTPException as http_exc:
         logging.error(f"HTTP error: {http_exc.detail}")
@@ -210,3 +261,296 @@ async def health_check():
         "version": app.version,
     }
 
+
+@app.get("/api/v1/calibration-data")
+async def get_calibration_data(
+    surface_id: Optional[int] = Query(None, description="Surface ID to calibrate"),
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
+):
+    """
+    Returns calibration data for a given surface or asset.
+    For now, returns mock calibration data.
+    """
+    try:
+        # Mock calibration data - in production this would call the calibration engine
+        import random
+        
+        # Generate realistic mock data
+        accuracy = round(random.uniform(0.85, 0.99), 3)
+        performance = round(random.uniform(0.80, 0.95), 3)
+        calibration_time = random.randint(150, 500)
+        rmse = round(random.uniform(0.015, 0.045), 4)
+        r2_score = round(random.uniform(0.90, 0.98), 3)
+        
+        calibration_data = {
+            "accuracy": accuracy,
+            "performance": performance,
+            "calibration_time": calibration_time,
+            "rmse": rmse,
+            "r2_score": r2_score,
+            "calibrated_surface": None,  # Would contain actual calibrated surface data
+            "surface_id": surface_id,
+            "asset_id": asset_id,
+            "timestamp": datetime.now().isoformat(),
+            "calibration_method": "mock_cnn"  # or "optimization"
+        }
+        
+        return JSONResponse(content=calibration_data)
+    except Exception as e:
+        logging.error(f"Error getting calibration data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting calibration data: {str(e)}")
+
+
+# WebGL Wallpaper API Endpoints
+@app.get("/api/surface_snapshot")
+async def get_surface_snapshot():
+    """
+    Returns historical surface data in x, y, z format for WebGL rendering.
+    """
+    try:
+        surface_data = store.get_latest_vol_surface()
+        if surface_data is None:
+            raise HTTPException(status_code=404, detail="No surface data available")
+        
+        # Convert to x, y, z format for WebGL
+        interpolated_data = interpolate_surface(surface_data, SurfaceType.LINEAR)
+        
+        # Create x, y, z coordinates
+        x_coords = []
+        y_coords = []
+        z_coords = []
+        
+        # Handle 2D array structure from interpolation
+        if isinstance(interpolated_data["implied_vols"], list) and len(interpolated_data["implied_vols"]) > 0:
+            if isinstance(interpolated_data["implied_vols"][0], list):
+                # 2D array structure
+                for j, dte in enumerate(interpolated_data["days_to_expiry"]):
+                    for i, moneyness in enumerate(interpolated_data["moneyness"]):
+                        if i < len(interpolated_data["implied_vols"][j]):
+                            vol = interpolated_data["implied_vols"][j][i]
+                            if vol is not None:
+                                x_coords.append(float(moneyness))
+                                y_coords.append(float(dte))
+                                z_coords.append(float(vol))
+            else:
+                # 1D array structure
+                for i, moneyness in enumerate(interpolated_data["moneyness"]):
+                    for j, dte in enumerate(interpolated_data["days_to_expiry"]):
+                        vol_index = j * len(interpolated_data["moneyness"]) + i
+                        if vol_index < len(interpolated_data["implied_vols"]):
+                            vol = interpolated_data["implied_vols"][vol_index]
+                            if vol is not None:
+                                x_coords.append(float(moneyness))
+                                y_coords.append(float(dte))
+                                z_coords.append(float(vol))
+        
+        return {
+            "x": x_coords,
+            "y": y_coords,
+            "z": z_coords,
+            "timestamp": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logging.error(f"Error getting surface snapshot: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting surface snapshot: {str(e)}")
+
+
+@app.get("/api/trendline")
+async def get_trendline(limit: int = Query(100, description="Number of historical points")):
+    """
+    Returns historical price/volatility trend line data.
+    """
+    try:
+        surfaces = store.get_last_n_surfaces(limit)
+        if not surfaces:
+            raise HTTPException(status_code=404, detail="No historical data available")
+        
+        trend_data = []
+        for i, surface in enumerate(surfaces):
+            if surface.implied_vols and len(surface.implied_vols) > 0:
+                avg_vol = sum(float(vol) for vol in surface.implied_vols) / len(surface.implied_vols)
+                trend_data.append({
+                    "time": i,  # Index as time proxy
+                    "price": float(avg_vol),  # Average volatility as price proxy
+                    "timestamp": surface.timestamp.isoformat() if surface.timestamp else None
+                })
+        
+        return {
+            "trendline": trend_data,
+            "count": len(trend_data)
+        }
+    except Exception as e:
+        logging.error(f"Error getting trendline: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting trendline: {str(e)}")
+
+
+@app.get("/api/price_history")
+async def get_price_history(
+    limit: int = Query(100, description="Number of price points to retrieve"),
+    asset_id: Optional[int] = Query(None, description="Asset ID to filter by")
+):
+    """
+    Returns historical price data for the underlying asset.
+    """
+    try:
+        # Get price history from the database
+        price_data = store.get_price_history(limit, asset_id)
+        
+        if not price_data:
+            raise HTTPException(status_code=404, detail="No price data available")
+        
+        # Convert to list of dictionaries
+        price_history = []
+        for row in price_data:
+            price_value = float(row["price"])
+            logging.info(f"Price data point: {row['timestamp']} - {price_value} (raw: {row['price']})")
+            price_history.append({
+                "timestamp": row["timestamp"].isoformat() if hasattr(row["timestamp"], 'isoformat') else str(row["timestamp"]),
+                "price": price_value,
+                "asset_id": row.get("asset_id"),
+                "symbol": row.get("symbol")
+            })
+        
+        return {
+            "prices": price_history,
+            "count": len(price_history)
+        }
+    except Exception as e:
+        logging.error(f"Error getting price history: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting price history: {str(e)}")
+
+
+@app.get("/api/stats")
+async def get_stats():
+    """
+    Returns latest spread, volume, and timestamp statistics.
+    """
+    try:
+        surface_data = store.get_latest_vol_surface()
+        if surface_data is None:
+            raise HTTPException(status_code=404, detail="No surface data available")
+        
+        interpolated_data = interpolate_surface(surface_data, SurfaceType.LINEAR)
+        
+        if not interpolated_data["implied_vols"]:
+            raise HTTPException(status_code=404, detail="No volatility data available")
+        
+        # Handle the case where implied_vols is a 2D array from interpolation
+        if isinstance(interpolated_data["implied_vols"], list) and len(interpolated_data["implied_vols"]) > 0:
+            if isinstance(interpolated_data["implied_vols"][0], list):
+                # 2D array - flatten it
+                vols = []
+                for row in interpolated_data["implied_vols"]:
+                    for vol in row:
+                        if vol is not None:
+                            vols.append(float(vol))
+            else:
+                # 1D array
+                vols = [float(v) for v in interpolated_data["implied_vols"] if v is not None]
+        else:
+            vols = []
+        
+        if not vols:
+            raise HTTPException(status_code=404, detail="No valid volatility data available")
+        
+        max_vol = max(vols)
+        min_vol = min(vols)
+        spread = (max_vol - min_vol) * 100  # Convert to percentage
+        
+        volume = len(vols)  # Number of data points as volume proxy
+        
+        return {
+            "spread": round(spread, 2),
+            "volume": volume,
+            "timestamp": datetime.now().isoformat(),
+            "max_vol": round(max_vol * 100, 2),
+            "min_vol": round(min_vol * 100, 2),
+            "avg_vol": round(sum(vols) / len(vols) * 100, 2)
+        }
+    except Exception as e:
+        logging.error(f"Error getting stats: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error getting stats: {str(e)}")
+
+
+@app.websocket("/api/stream")
+async def websocket_stream(websocket: WebSocket):
+    """
+    WebSocket endpoint for real-time updates.
+    """
+    await websocket.accept()
+    client_connected = True
+    
+    try:
+        while client_connected:
+            # Send surface snapshot
+            surface_data = await get_surface_snapshot()
+            await websocket.send_json({
+                "type": "surface_snapshot",
+                "data": surface_data
+            })
+            
+            # Send stats
+            stats_data = await get_stats()
+            await websocket.send_json({
+                "type": "stats",
+                "data": stats_data
+            })
+            
+            # Wait 5 seconds before next update
+            await asyncio.sleep(5)
+            
+    except WebSocketDisconnect:
+        print("WebSocket client disconnected")
+        client_connected = False
+    except Exception as e:
+        print(f"Error in WebSocket stream: {str(e)}")
+        client_connected = False
+    finally:
+        if client_connected:
+            await websocket.close()
+
+
+##TODO
+#@app.websocket("/api/bid_ask")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/spread")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/spread_vol")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/spread_vol_of_vol")
+#async def websocket_stream(websocket: WebSocket):
+    pass
+
+##TODO
+#@app.websocket("/api/orderbook")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/orderbook_imbalance")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/orderbook_flow")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/orderbook_depth")
+#async def websocket_stream(websocket: WebSocket):
+#    pass
+
+##TODO
+#@app.websocket("/api/trades")
+#async def websocket_stream(websocket: WebSocket):
+#    pass

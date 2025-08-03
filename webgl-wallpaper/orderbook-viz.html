@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VolaSurfer - Orderbook Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: #1a1a1a;
+            color: white;
+            min-height: 100vh;
+        }
+        
+        .header {
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .nav-links {
+            display: flex;
+            gap: 1rem;
+        }
+        
+        .nav-link {
+            padding: 0.5rem 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            text-decoration: none;
+            color: white;
+            transition: all 0.3s ease;
+        }
+        
+        .nav-link:hover {
+            background: rgba(255, 255, 255, 0.2);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+        
+        .container {
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .page-title {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            background: linear-gradient(45deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .page-subtitle {
+            text-align: center;
+            margin-bottom: 3rem;
+            opacity: 0.8;
+            font-size: 1.1rem;
+        }
+        
+        .coming-soon-section {
+            text-align: center;
+            padding: 3rem;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            margin-bottom: 2rem;
+        }
+        
+        .coming-soon-title {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+            color: #00ff88;
+        }
+        
+        .coming-soon-description {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            opacity: 0.8;
+        }
+        
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 2rem;
+            margin-top: 3rem;
+        }
+        
+        .feature-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 2rem;
+            transition: all 0.3s ease;
+        }
+        
+        .feature-card:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+        
+        .feature-card h3 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+        
+        .feature-card p {
+            opacity: 0.8;
+            line-height: 1.6;
+            margin-bottom: 1rem;
+        }
+        
+        .placeholder-box {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px dashed rgba(255, 255, 255, 0.3);
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            margin-top: 1rem;
+        }
+        
+        .placeholder-title {
+            font-weight: 600;
+            color: #00ff88;
+            margin-bottom: 0.5rem;
+        }
+        
+        .placeholder-description {
+            font-size: 0.9rem;
+            opacity: 0.7;
+        }
+        
+        .metrics-preview {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .metric-item {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 1rem;
+            text-align: center;
+        }
+        
+        .metric-label {
+            font-size: 0.9rem;
+            color: #ccc;
+            margin-bottom: 0.5rem;
+        }
+        
+        .metric-value {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #00ff88;
+        }
+        
+        .orderbook-preview {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 1rem;
+            gap: 1rem;
+        }
+        
+        .orderbook-side {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 1rem;
+        }
+        
+        .orderbook-side h4 {
+            text-align: center;
+            margin-bottom: 1rem;
+            color: #667eea;
+        }
+        
+        .orderbook-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 0.25rem 0;
+            font-size: 0.9rem;
+        }
+        
+        .bid-row {
+            color: #00ff88;
+        }
+        
+        .ask-row {
+            color: #ff6b6b;
+        }
+        
+        @media (max-width: 768px) {
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .orderbook-preview {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">VolaSurfer</div>
+        <nav class="nav-links">
+            <a href="index.html" class="nav-link">🏠 Home</a>
+            <a href="historical-surface.html" class="nav-link">📈 Historical</a>
+        </nav>
+    </header>
+    
+    <div class="container">
+        <h1 class="page-title">Orderbook Visualization</h1>
+        <p class="page-subtitle">
+            Real-time orderbook analysis with advanced spread and depth visualization
+        </p>
+        
+        <div class="coming-soon-section">
+            <h2 class="coming-soon-title">🚀 Coming Soon!</h2>
+            <p class="coming-soon-description">
+                Advanced orderbook visualization with real-time data streaming, 
+                spread analysis, and depth profiling for options markets.
+            </p>
+        </div>
+        
+        <div class="features-grid">
+            <div class="feature-card">
+                <h3>📊 Bid/Ask Spread Analysis</h3>
+                <p>Real-time monitoring of bid-ask spreads across different strike prices and expiries.</p>
+                <div class="placeholder-box">
+                    <div class="placeholder-title">Spread Metrics</div>
+                    <div class="placeholder-description">Live spread data will appear here</div>
+                    <div class="metrics-preview">
+                        <div class="metric-item">
+                            <div class="metric-label">Current Spread</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Avg Spread</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Spread %</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <h3>📈 Spread Volatility</h3>
+                <p>Track spread volatility over time with statistical analysis and trend detection.</p>
+                <div class="placeholder-box">
+                    <div class="placeholder-title">Volatility Metrics</div>
+                    <div class="placeholder-description">Spread volatility analysis will appear here</div>
+                    <div class="metrics-preview">
+                        <div class="metric-item">
+                            <div class="metric-label">Spread Vol</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Vol of Vol</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Trend</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <h3>🏊 Orderbook Depth</h3>
+                <p>Visualize orderbook depth with interactive charts and liquidity analysis.</p>
+                <div class="placeholder-box">
+                    <div class="placeholder-title">Depth Visualization</div>
+                    <div class="placeholder-description">Orderbook depth chart will appear here</div>
+                    <div class="orderbook-preview">
+                        <div class="orderbook-side">
+                            <h4>Bids</h4>
+                            <div class="orderbook-row bid-row">
+                                <span>Price</span>
+                                <span>Size</span>
+                            </div>
+                            <div class="orderbook-row bid-row">
+                                <span>--</span>
+                                <span>--</span>
+                            </div>
+                            <div class="orderbook-row bid-row">
+                                <span>--</span>
+                                <span>--</span>
+                            </div>
+                            <div class="orderbook-row bid-row">
+                                <span>--</span>
+                                <span>--</span>
+                            </div>
+                        </div>
+                        <div class="orderbook-side">
+                            <h4>Asks</h4>
+                            <div class="orderbook-row ask-row">
+                                <span>Price</span>
+                                <span>Size</span>
+                            </div>
+                            <div class="orderbook-row ask-row">
+                                <span>--</span>
+                                <span>--</span>
+                            </div>
+                            <div class="orderbook-row ask-row">
+                                <span>--</span>
+                                <span>--</span>
+                            </div>
+                            <div class="orderbook-row ask-row">
+                                <span>--</span>
+                                <span>--</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <h3>⚡ Real-time Streaming</h3>
+                <p>WebSocket-based real-time data streaming with low-latency updates.</p>
+                <div class="placeholder-box">
+                    <div class="placeholder-title">Connection Status</div>
+                    <div class="placeholder-description">WebSocket connection will be established here</div>
+                    <div class="metrics-preview">
+                        <div class="metric-item">
+                            <div class="metric-label">Status</div>
+                            <div class="metric-value">Offline</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Latency</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Updates/s</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <h3>🎯 Market Microstructure</h3>
+                <p>Advanced analysis of market microstructure patterns and liquidity dynamics.</p>
+                <div class="placeholder-box">
+                    <div class="placeholder-title">Microstructure Analysis</div>
+                    <div class="placeholder-description">Market microstructure metrics will appear here</div>
+                    <div class="metrics-preview">
+                        <div class="metric-item">
+                            <div class="metric-label">Liquidity</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Impact</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Resilience</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <h3>📊 Advanced Analytics</h3>
+                <p>Statistical analysis, correlation studies, and predictive modeling.</p>
+                <div class="placeholder-box">
+                    <div class="placeholder-title">Analytics Dashboard</div>
+                    <div class="placeholder-description">Advanced analytics will appear here</div>
+                    <div class="metrics-preview">
+                        <div class="metric-item">
+                            <div class="metric-label">Correlation</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Prediction</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                        <div class="metric-item">
+                            <div class="metric-label">Confidence</div>
+                            <div class="metric-value">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        function launchApp() {
+            // Redirect to the main app
+            window.location.href = 'test.html';
+        }
+    </script>
+</body>
+</html> 

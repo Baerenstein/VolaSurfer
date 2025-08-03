@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VolaSurfer Historical Surface Viewer</title>
+    <link rel="stylesheet" href="historical-style.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">VolaSurfer</div>
+        <nav class="nav-links">
+            <a href="index.html" class="nav-link">🏠 Home</a>
+            <a href="orderbook-viz.html" class="nav-link">📊 Orderbook</a>
+        </nav>
+    </header>
+    
+    <div id="container">
+        <canvas id="webgl-canvas"></canvas>
+        
+        <!-- Main Controls Panel -->
+        <div id="controls-panel">
+            <div class="panel-header">
+                <h2>Historical Surface Viewer</h2>
+                <div class="connection-status" id="connection-status">Disconnected</div>
+            </div>
+            
+            <!-- View Toggle -->
+            <div class="control-section">
+                <h3>View Mode</h3>
+                <div class="view-toggle">
+                    <button id="standard-view-btn" class="btn btn-primary view-btn active">Standard View</button>
+                    <button id="calibrated-view-btn" class="btn btn-secondary view-btn">Calibrated View</button>
+                </div>
+            </div>
+            
+            <!-- Settings Section -->
+            <div class="control-section">
+                <h3>Settings</h3>
+                <div class="control-group">
+                    <label for="asset-select">Asset:</label>
+                    <select id="asset-select">
+                        <option value="">All Assets</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="limit-select">Data Limit:</label>
+                    <select id="limit-select">
+                        <option value="10">10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                        <option value="200">200</option>
+                        <option value="500" selected>500</option>
+                        <option value="1000">1,000</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label for="interpolation-select">Smoothness:</label>
+                    <select id="interpolation-select">
+                        <option value="10">Low (10x10)</option>
+                        <option value="20" selected>Medium (20x20)</option>
+                        <option value="30">High (30x30)</option>
+                        <option value="50">Ultra (50x50)</option>
+                    </select>
+                </div>
+                
+                <div class="control-group">
+                    <label>
+                        <input type="checkbox" id="wireframe-toggle">
+                        Wireframe Mode
+                    </label>
+                </div>
+                
+                <button id="refresh-btn" class="btn btn-primary">Refresh Data</button>
+            </div>
+            
+            <!-- Playback Controls -->
+            <div class="control-section" id="playback-section" style="display: none;">
+                <h3>Timeline Playback</h3>
+                
+                <div class="playback-buttons">
+                    <button id="reset-btn" class="btn btn-secondary" title="Go to oldest">⏮</button>
+                    <button id="step-back-btn" class="btn btn-secondary" title="Step backward">⏪</button>
+                    <button id="play-pause-btn" class="btn btn-success" title="Play/Pause">▶</button>
+                    <button id="step-forward-btn" class="btn btn-secondary" title="Step forward">⏩</button>
+                    <button id="end-btn" class="btn btn-secondary" title="Go to newest">⏭</button>
+                </div>
+                
+                <div class="timeline-slider">
+                    <input type="range" id="timeline-slider" min="0" max="100" value="100">
+                    <div class="timeline-labels">
+                        <span>Oldest</span>
+                        <span id="frame-counter">Frame 1 of 1</span>
+                        <span>Newest</span>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label for="speed-select">Playback Speed:</label>
+                    <select id="speed-select">
+                        <option value="2000">0.5x (2s)</option>
+                        <option value="1000" selected>1x (1s)</option>
+                        <option value="500">2x (0.5s)</option>
+                        <option value="250">4x (0.25s)</option>
+                        <option value="100">10x (0.1s)</option>
+                    </select>
+                </div>
+            </div>
+            
+            <!-- Manual Selection -->
+            <div class="control-section" id="manual-section" style="display: none;">
+                <h3>Manual Selection</h3>
+                <div class="control-group">
+                    <label for="surface-select">Surface:</label>
+                    <select id="surface-select"></select>
+                </div>
+            </div>
+            
+            <!-- Surface Information -->
+            <div class="control-section" id="info-section" style="display: none;">
+                <h3>Surface Information</h3>
+                <div id="surface-info">
+                    <p><strong>Frame:</strong> <span id="frame-info">-</span></p>
+                    <p><strong>Timestamp:</strong> <span id="timestamp-info">-</span></p>
+                    <p><strong>Asset:</strong> <span id="asset-info">-</span></p>
+                    <p><strong>Spot Price:</strong> <span id="price-info">-</span></p>
+                    <p><strong>Status:</strong> <span id="status-info">-</span></p>
+                </div>
+                
+                <div class="surface-dimensions">
+                    <h4>Surface Dimensions:</h4>
+                    <p><strong>Total Points:</strong> <span id="points-info">-</span></p>
+                    <p><strong>Unique Strikes:</strong> <span id="strikes-info">-</span></p>
+                    <p><strong>Unique Expiries:</strong> <span id="expiries-info">-</span></p>
+                    <p><strong>Moneyness Range:</strong> <span id="moneyness-range">-</span></p>
+                    <p><strong>DTE Range:</strong> <span id="dte-range">-</span></p>
+                    <p><strong>Vol Range:</strong> <span id="vol-range">-</span></p>
+                </div>
+            </div>
+            
+            <!-- Calibration Metrics -->
+            <div class="control-section" id="calibration-metrics" style="display: none;">
+                <h3>Calibration Metrics</h3>
+                <div id="calibration-info">
+                    <div class="metric-row">
+                        <span class="metric-label">Accuracy:</span>
+                        <span class="metric-value" id="accuracy">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Performance:</span>
+                        <span class="metric-value" id="performance">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">Calibration Time:</span>
+                        <span class="metric-value" id="calib-time">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">RMSE:</span>
+                        <span class="metric-value" id="rmse">-</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">R² Score:</span>
+                        <span class="metric-value" id="r2-score">-</span>
+                    </div>
+                </div>
+                
+                <!-- Simple Performance Chart -->
+                <div class="performance-chart">
+                    <h4>Performance Overview</h4>
+                    <div class="chart-container">
+                        <div class="chart-bar">
+                            <div class="bar-fill" id="accuracy-bar" style="width: 0%"></div>
+                            <span class="bar-label">Accuracy</span>
+                        </div>
+                        <div class="chart-bar">
+                            <div class="bar-fill" id="performance-bar" style="width: 0%"></div>
+                            <span class="bar-label">Performance</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Price Chart -->
+        <div id="price-chart" class="price-chart">
+            <div class="chart-header">
+                <h3>Price & Volatility History</h3>
+                <div class="chart-controls">
+                    <button id="toggle-chart" class="btn btn-secondary">Minimize</button>
+                </div>
+            </div>
+            <canvas id="price-canvas" width="500" height="120"></canvas>
+            <canvas id="volatility-canvas" width="500" height="120"></canvas>
+            <canvas id="vol-of-vol-canvas" width="500" height="120"></canvas>
+        </div>
+        
+        <!-- Loading Overlay -->
+        <div id="loading" class="loading-overlay">
+            <div class="loading-content">
+                <div class="spinner"></div>
+                <p>Loading Historical Data...</p>
+            </div>
+        </div>
+    </div>
+    
+    <script src="historical-surface.js"></script>
+</body>
+</html> 
