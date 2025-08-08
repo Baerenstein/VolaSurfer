@@ -14,6 +14,10 @@ class StorageConfig(BaseSettings):
     STORAGE_TYPE: StorageType = StorageType.POSTGRES
     ARCTIC_URI: str = "lmdb://tmp/trading_data"
     POSTGRES_URI: str = "postgresql://mikeb:postgres@localhost:5432/optionsdb"  # Update with your credentials
+    
+    class Config:
+        env_prefix = ""
+        extra = "ignore"
 
 
 class Settings(BaseSettings):
@@ -29,3 +33,4 @@ class Settings(BaseSettings):
     MAX_MATURITY: int = 30
     class Config:
         env_file = ".env"
+        extra = "ignore"
