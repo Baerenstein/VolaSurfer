@@ -524,9 +524,6 @@ Examples:
     parser.add_argument('-SOL_USDC', action='store_const', const='SOL', dest='crypto_flag')
     parser.add_argument('-XRP', action='store_const', const='XRP', dest='crypto_flag')
     
-    # ASCII art option
-    parser.add_argument('--show-art', action='store_true', help='Display ASCII art on startup')
-    
     args = parser.parse_args()
     
     # Determine currency from various argument sources
@@ -555,14 +552,14 @@ Examples:
         # Default to 1 minute if no interval specified
         interval = 1
     
-    return currency, interval, args.show_art
+    return currency, interval
 
 async def main():
     try:
-        currency, interval, show_art = parse_arguments()
+        currency, interval = parse_arguments()
         
-        if show_art:
-            display_volasurfer_art()
+        # Always display ASCII art on startup
+        display_volasurfer_art()
         
         settings = Settings()
         exchange_api = DeribitAPI()
